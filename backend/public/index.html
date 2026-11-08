@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Дневник саморефлексии</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <nav class="tabs">
+        <a class="tab active" href="#">Запись дня</a>
+        <a class="tab" href="#">История</a>
+        <a class="tab" href="#">О проекте</a>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <!-- Профиль -->
+      <section class="card profile">
+        <h2 class="card-title">Твой профиль</h2>
+        <svg id="radar" viewBox="0 0 320 320" role="img" aria-label="Профиль по девяти зонам"></svg>
+      </section>
+
+      <!-- Вопрос дня -->
+      <div class="right">
+        <section class="card prompt-card">
+          <div class="prompt-head">
+            <span class="zone-tag" id="zone-tag">Работа</span>
+            <a class="why" href="#">Почему этот вопрос? ›</a>
+          </div>
+          <p class="prompt-text" id="prompt-text">Была ли сегодня задача, которая оказалась сложнее обычного? Что сделало её трудной?</p>
+          <textarea id="entry" placeholder="Начни писать..."></textarea>
+        </section>
+
+        <div class="actions">
+          <button type="button" class="btn-primary" id="save">Сохранить запись</button>
+          <div class="rating">
+            <span>Вопрос был уместен?</span>
+            <button type="button" class="round yes" aria-label="Да">+</button>
+            <button type="button" class="round no" aria-label="Нет">–</button>
+          </div>
+        </div>
+
+        <p class="note">Учебный проект. Не является медицинским или психологическим советом.</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

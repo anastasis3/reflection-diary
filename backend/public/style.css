@@ -1,0 +1,130 @@
+:root {
+  --bg: #14131f;
+  --panel: #1a1929;
+  --border: #302f45;
+  --text: #f0effb;
+  --muted: #8b89a3;
+  --accent: #7f77dd;
+  --accent-light: #afa9ec;
+  --on-accent: #0c0b14;
+  --green: #1d9e75;
+  --zone-bg: #2a1f18;
+  --zone-text: #f0997b;
+  --glow: rgba(127, 119, 221, 0.35);
+  --grad: linear-gradient(135deg, #9b8cff 0%, #7f77dd 45%, #5b4fd1 100%);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(127, 119, 221, 0.28), transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(91, 79, 209, 0.25), transparent 50%),
+    linear-gradient(160deg, #0e0d18 0%, #1a1633 55%, #12101f 100%);
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+}
+
+.app { max-width: 1000px; margin: 0 auto; padding: 0 20px 40px; }
+
+/* Верхняя панель */
+.topbar { border-bottom: 1px solid var(--border); padding: 20px 0 0; margin-bottom: 28px; }
+.tabs { display: flex; gap: 8px; padding-bottom: 14px; }
+.tab {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 15px;
+  padding: 6px 14px;
+  border-radius: 8px;
+}
+.tab.active { background: var(--grad); color: #fff; font-weight: 600; box-shadow: 0 0 18px var(--glow); }
+.tab:not(.active):hover { color: var(--text); }
+
+/* Сетка */
+.layout { display: grid; grid-template-columns: 360px 1fr; gap: 24px; align-items: start; }
+
+.card {
+  background: linear-gradient(160deg, rgba(34, 31, 60, 0.85), rgba(22, 20, 40, 0.85));
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(155, 140, 255, 0.28);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 0 0 1px rgba(127, 119, 221, 0.08), 0 0 40px var(--glow), 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.card-title { margin: 0 0 8px; font-size: 14px; font-weight: 400; color: var(--muted); }
+
+/* Профиль */
+#radar { width: 100%; height: auto; display: block; }
+
+/* Вопрос дня */
+.prompt-head { display: flex; justify-content: space-between; align-items: center; }
+.zone-tag {
+  background: var(--zone-bg);
+  color: var(--zone-text);
+  font-size: 13px;
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+.why { color: var(--accent-light); font-size: 14px; text-decoration: none; text-shadow: 0 0 12px var(--glow); }
+.why:hover { text-decoration: underline; }
+.prompt-text { font-size: 18px; margin: 20px 0; }
+
+textarea {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  background: rgba(10, 9, 20, 0.6);
+  color: var(--text);
+  border: 1px solid rgba(155, 140, 255, 0.25);
+  border-radius: 12px;
+  padding: 12px;
+  font: inherit;
+}
+textarea::placeholder { color: var(--muted); }
+textarea:focus { outline: none; border-color: #9b8cff; box-shadow: 0 0 0 3px rgba(155, 140, 255, 0.25), 0 0 24px var(--glow); }
+
+/* Кнопки */
+.actions { display: flex; align-items: center; gap: 24px; margin-top: 20px; flex-wrap: wrap; }
+.btn-primary {
+  background: var(--grad);
+  color: #fff;
+  border: 0;
+  border-radius: 14px;
+  padding: 14px 40px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 0 22px rgba(127, 119, 221, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.12);
+  box-shadow: 0 0 34px rgba(155, 140, 255, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.btn-primary:active { transform: translateY(0); }
+
+.rating { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
+.round {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 0;
+  font-size: 20px;
+  cursor: pointer;
+}
+.round.yes { background: linear-gradient(135deg, #3ddba8, #1d9e75); color: #04342c; box-shadow: 0 0 16px rgba(29, 158, 117, 0.55); }
+.round.no  { background: rgba(60, 56, 96, 0.7); color: #c9c6e8; border: 1px solid rgba(155, 140, 255, 0.25); }
+.round { transition: transform 0.15s ease; }
+.round:hover { transform: scale(1.1); }
+
+.note { color: var(--muted); font-size: 13px; font-style: italic; margin-top: 20px; }
+
+/* Мобильная версия */
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; }
+}

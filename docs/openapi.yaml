@@ -1,0 +1,973 @@
+openapi: 3.1.0
+
+info:
+  title: Reflection Diary API
+  version: 1.0.0
+  summary: The HTTP interface of an adaptive self-reflection diary.
+  description: |
+    The API behind *Development and Experimental Evaluation of an Adaptive
+    Self-Reflection Diary with AI-Based Personalization*.
+
+    ### How the diary works
+
+    A participant answers nine statements once. Those answers become nine
+    **weights**, one per topic zone, each between 0.00 and 1.00. Every day the
+    diary chooses a zone, draws a question from it, and — after the entry is
+    saved — moves the weights towards what the entry was about:
+
+        new = 0.3 × score + 0.7 × old
+
+    About one question in three is drawn at random from the whole bank instead
+    of from the weights. Both kinds go to every participant, so each person is
+    compared against themselves. Which kind a question was is **never sent to
+    the client**: a participant who could see it would rate it differently and
+    the comparison would be worthless.
+
+    ### Conventions
+
+    * All request and response bodies are JSON.
+    * Authentication is a bearer token from `/auth/register` or `/auth/login`.
+    * Every error has the same shape, described by `Error` below. A `422`
+      additionally carries `details`, one entry per field that needs fixing.
+    * Times are ISO 8601 with a time zone. Days are `YYYY-MM-DD`.
+
+  contact:
+    name: Anastasiya Kupreichyk
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development
+
+tags:
+  - name: Health
+  - name: Catalogue
+  - name: Account
+  - name: Onboarding
+  - name: Questions
+  - name: Entries
+  - name: Profile
+  - name: History
+  - name: Privacy
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      security: []
+      responses:
+        '200':
+          description: The service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, examples: [ok] }
+                  uptime: { type: integer, description: Seconds since start. }
+                  time: { type: string, format: date-time }
+
+  /zones:
+    get:
+      tags: [Catalogue]
+      summary: The nine topic zones
+      description: |
+        Public, because the interface needs the names and colours before anyone
+        has logged in. The zones are an adaptation of the WHOQOL-BREF domains
+        and the PERMA elements for journalling, not a validated scale.
+      security: []
+      responses:
+        '200':
+          description: The catalogue.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  zones:
+                    type: array
+                    items: { $ref: '#/components/schemas/Zone' }
+
+  /auth/register:
+    post:
+      tags: [Account]
+      summary: Create an account
+      description: |
+        Creates the credentials, the profile row and both consent rows. Both
+        consents are required: without the consent to analyse entries the diary
+        cannot choose a question, so there is nothing to register for.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, acceptPrivacyNotice, acceptAiProcessing]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, maxLength: 200 }
+                acceptPrivacyNotice: { type: boolean }
+                acceptAiProcessing:
+                  type: boolean
+                  description: Consent to send the text of entries for analysis.
+      responses:
+        '201':
+          description: The account was created and is logged in.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '400':
+          description: A consent is missing.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '409':
+          description: That e-mail address is already registered (`EMAIL_TAKEN`).
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /auth/login:
+    post:
+      tags: [Account]
+      summary: Log in
+      description: |
+        A wrong password and an unknown e-mail address give the same `401` with
+        the same message, so the endpoint cannot be used to find out which
+        addresses are registered.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Logged in.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /auth/me:
+    get:
+      tags: [Account]
+      summary: The signed-in account
+      responses:
+        '200':
+          description: Who the token belongs to.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /onboarding:
+    get:
+      tags: [Onboarding]
+      summary: The quiz and how far it has got
+      description: |
+        `nextStep` is the first statement with no answer, which is where the
+        screen resumes. It is `null` once every statement is answered.
+      responses:
+        '200':
+          description: The nine statements with any answers already given.
+          content: { application/json: { schema: { $ref: '#/components/schemas/OnboardingState' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /onboarding/answers:
+    post:
+      tags: [Onboarding]
+      summary: Answer one statement
+      description: |
+        Saved immediately, one statement at a time, so the quiz can be left and
+        resumed. Answering the same statement again replaces the earlier answer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [zoneId, value]
+              properties:
+                zoneId: { $ref: '#/components/schemas/ZoneId' }
+                value: { type: integer, minimum: 1, maximum: 5 }
+      responses:
+        '200':
+          description: The updated quiz state.
+          content: { application/json: { schema: { $ref: '#/components/schemas/OnboardingState' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /onboarding/complete:
+    post:
+      tags: [Onboarding]
+      summary: Finish the quiz and create the starting profile
+      description: |
+        Converts the nine answers into the nine starting weights with
+        `weight = (answer − 1) / 4`. Refused while any statement is unanswered.
+      responses:
+        '200':
+          description: The quiz is complete and the weights exist.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OnboardingState'
+                  - type: object
+                    properties:
+                      weights:
+                        type: array
+                        items: { $ref: '#/components/schemas/Weight' }
+        '400':
+          description: Some statements are still unanswered; `details.missing` lists them.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /prompts/today:
+    get:
+      tags: [Questions]
+      summary: The question of the day
+      description: |
+        One question per calendar day. Calling this again on the same day
+        returns the same question with `isNew: false`, so a reload or a second
+        device cannot hand out a second one and spoil the measurement.
+
+        The response deliberately omits why the question was chosen.
+      responses:
+        '200':
+          description: Today's question.
+          content: { application/json: { schema: { $ref: '#/components/schemas/TodaysQuestion' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: |
+            `ONBOARDING_INCOMPLETE` — the quiz has not been finished, so there
+            are no weights to choose from. `NO_ACTIVE_ZONES` — every zone is muted.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /prompts/{id}/explanation:
+    get:
+      tags: [Questions]
+      summary: Why this question?
+      description: |
+        The text behind the accordion on the Today screen. It states the real
+        reason, including when that reason was chance — telling a participant
+        that a randomly drawn question was chosen for them would make the
+        explanation a lie.
+
+        Calling this records that the explanation was opened, which is one of
+        the engagement measures of the study.
+      parameters:
+        - $ref: '#/components/parameters/PromptShownId'
+      responses:
+        '200':
+          description: The explanation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  zone: { $ref: '#/components/schemas/Zone' }
+                  weight: { type: number, format: float }
+                  text: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /prompts/{id}/rating:
+    post:
+      tags: [Questions]
+      summary: Rate how relevant the question was
+      description: |
+        The one measurement the diary cannot work out for itself, and the main
+        outcome of the study: the share of liked questions among the adaptive
+        ones against the random ones. Optional for the participant — an absent
+        rating means "not rated", never "disliked".
+      parameters:
+        - $ref: '#/components/parameters/PromptShownId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [relevant]
+              properties:
+                relevant: { type: boolean }
+      responses:
+        '200':
+          description: The rating was recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  promptShownId: { type: string, format: uuid }
+                  relevanceRating: { type: boolean }
+                  ratedAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /entries:
+    post:
+      tags: [Entries]
+      summary: Save an entry
+      description: |
+        Four steps, in this order: the text is saved, it is linked to the
+        question it answers, it is analysed, and the weights move. This is the
+        only point at which the text of an entry is sent for analysis — never
+        while the participant is typing.
+
+        Steps three and four can fail without taking step one with them. The
+        `analysis` field says what happened:
+
+        | value | meaning |
+        | --- | --- |
+        | `classified` | analysed; `weightChanges` lists what moved |
+        | `failed` | the analysis was unavailable; the entry is kept, the profile is unchanged |
+        | `skipped_no_consent` | consent was withdrawn; the entry is kept and not analysed |
+
+        A `201` is returned in all three cases, because in all three cases the
+        entry exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, minLength: 1, maxLength: 20000 }
+                promptShownId:
+                  type: string
+                  format: uuid
+                  description: The question this entry answers, from `/prompts/today`.
+      responses:
+        '201':
+          description: The entry was saved.
+          content: { application/json: { schema: { $ref: '#/components/schemas/SavedEntry' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: The question does not belong to this account.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+    get:
+      tags: [Entries]
+      summary: List entries
+      parameters:
+        - name: zone
+          in: query
+          description: Only entries whose highest-scoring zone is this one.
+          schema: { $ref: '#/components/schemas/ZoneId' }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: The entries, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: '#/components/schemas/Entry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /entries/{id}:
+    get:
+      tags: [Entries]
+      summary: One entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The entry.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entry: { $ref: '#/components/schemas/Entry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: |
+            Not found — returned both when the entry does not exist and when it
+            belongs to someone else, so a known id is not enough to learn that
+            an entry exists.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /profile:
+    get:
+      tags: [Profile]
+      summary: The topic profile
+      description: |
+        The nine weights, highest first, each with how far it has moved since
+        the quiz and whether it is one of the three currently asked about.
+      responses:
+        '200':
+          description: The profile.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Profile' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: '`ONBOARDING_INCOMPLETE` — there is no profile until the quiz is finished.'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /profile/weights:
+    patch:
+      tags: [Profile]
+      summary: Edit the weights by hand
+      description: |
+        A participant may set a value and may mute zones, but at least three
+        must stay active or there is nothing left to ask about. The edit is
+        applied as a whole: if the rule would be broken, nothing changes.
+
+        A muted zone is left alone by the adaptation entirely — its weight does
+        not move when an entry is classified.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [zones]
+              properties:
+                zones:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [zoneId]
+                    properties:
+                      zoneId: { $ref: '#/components/schemas/ZoneId' }
+                      weight: { type: number, minimum: 0, maximum: 1 }
+                      isMuted: { type: boolean }
+      responses:
+        '200':
+          description: The updated profile, with the list of what changed.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Profile' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: '`TOO_FEW_ACTIVE_ZONES` — fewer than three zones would be left on.'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /profile/trend:
+    get:
+      tags: [Profile]
+      summary: One zone over time
+      description: |
+        Only the days on which the zone actually moved are returned. No value
+        is invented for a day the participant did not write on.
+      parameters:
+        - name: zone
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/ZoneId' }
+        - name: days
+          in: query
+          schema: { type: integer, minimum: 2, maximum: 365, default: 30 }
+      responses:
+        '200':
+          description: The series, oldest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  zone: { $ref: '#/components/schemas/Zone' }
+                  from: { type: string, format: date }
+                  days: { type: integer }
+                  first: { type: [number, 'null'] }
+                  last: { type: [number, 'null'] }
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day: { type: string, format: date }
+                        weight: { type: number }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /profile/changes:
+    get:
+      tags: [Profile]
+      summary: Every change to every weight
+      description: |
+        The audit trail. Each row records the old and new value and what caused
+        the change — `quiz`, `entry` or `manual`. In PostgreSQL this is written
+        by a trigger, so the application cannot forget to record a change.
+      responses:
+        '200':
+          description: The changes, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changes:
+                    type: array
+                    items: { $ref: '#/components/schemas/WeightChange' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /history/summary:
+    get:
+      tags: [History]
+      summary: How many entries fall into each zone
+      description: |
+        All nine zones are returned, including those with a count of zero: the
+        filter pills show them, and a zone with nothing in it is a state the
+        interface has a screen for.
+      responses:
+        '200':
+          description: The totals.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  zones:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        zone: { $ref: '#/components/schemas/Zone' }
+                        count: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /history/calendar:
+    get:
+      tags: [History]
+      summary: One month as a calendar
+      description: |
+        Every day of the month, including the empty ones — the gaps are part of
+        what a person is looking at. `firstWeekday` is 0 for Monday.
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema: { type: string, pattern: '^\d{4}-\d{2}$' }
+          example: '2026-11'
+      responses:
+        '200':
+          description: The month.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Calendar' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /history/day/{day}:
+    get:
+      tags: [History]
+      summary: One day in full
+      description: |
+        The question asked that day, how it was rated, and the entries written.
+        A day with nothing on it is a valid answer, not an error.
+      parameters:
+        - name: day
+          in: path
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: The day.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Day' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /account/consents:
+    get:
+      tags: [Privacy]
+      summary: The consents on record
+      responses:
+        '200':
+          description: Both consents, with when each was given and withdrawn.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  consents:
+                    type: array
+                    items: { $ref: '#/components/schemas/Consent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /account/consents/ai-processing:
+    delete:
+      tags: [Privacy]
+      summary: Withdraw the consent to analyse entries
+      description: |
+        Nothing is deleted and the diary keeps working: entries are still
+        saved, they are simply no longer analysed, so the profile stops
+        changing. The row is kept with a `withdrawnAt` timestamp, because the
+        study has to be able to say when processing stopped.
+      responses:
+        '200':
+          description: The updated consents.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  consents:
+                    type: array
+                    items: { $ref: '#/components/schemas/Consent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Privacy]
+      summary: Give the consent again
+      responses:
+        '200':
+          description: The updated consents.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  consents:
+                    type: array
+                    items: { $ref: '#/components/schemas/Consent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /account/export:
+    get:
+      tags: [Privacy]
+      summary: Download everything stored about this account
+      description: |
+        Assembled from the same repositories the application itself reads, not
+        from a separate summary, so it cannot quietly leave something out.
+      responses:
+        '200':
+          description: The whole account as JSON, served as an attachment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Export' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /account:
+    delete:
+      tags: [Privacy]
+      summary: Delete the account and all of its data
+      description: |
+        Removes the account, every entry, every topic score, the profile, the
+        weight history and everything recorded during the pilot. It cannot be
+        undone, and the token stops working immediately.
+      responses:
+        '200':
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean }
+                  removed:
+                    type: object
+                    properties:
+                      entries: { type: integer }
+                      questionsShown: { type: integer }
+                      weights: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: The token returned by `/auth/register` or `/auth/login`.
+
+  parameters:
+    PromptShownId:
+      name: id
+      in: path
+      required: true
+      description: The `promptShownId` from `/prompts/today`.
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthorized:
+      description: No token, an expired token, or an account that no longer exists.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Not found, or not yours.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationFailed:
+      description: One or more fields need correcting; `details` says which.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error:
+              code: VALIDATION_FAILED
+              message: Some fields need correcting.
+              details:
+                - field: email
+                  message: Enter a valid e-mail address.
+                  in: body
+
+  schemas:
+    ZoneId:
+      type: string
+      enum: [work, people, health, energy, emotion, self, interest, meaning, everyday]
+
+    Zone:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/ZoneId' }
+        name: { type: string, examples: ['work & study'] }
+        short: { type: string, examples: [work] }
+        colour: { type: string, examples: ['#A99BFF'] }
+        sortOrder: { type: integer }
+
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        createdAt: { type: string, format: date-time }
+        onboardingCompleted: { type: boolean }
+        aiProcessingConsent: { type: boolean }
+
+    Session:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        token: { type: string, description: Bearer token. }
+
+    OnboardingState:
+      type: object
+      properties:
+        total: { type: integer, examples: [9] }
+        answered: { type: integer }
+        nextStep:
+          type: [integer, 'null']
+          description: The first unanswered statement, or null when all are answered.
+        completed: { type: boolean }
+        startedAt: { type: [string, 'null'], format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+        statements:
+          type: array
+          items:
+            type: object
+            properties:
+              step: { type: integer }
+              zoneId: { $ref: '#/components/schemas/ZoneId' }
+              text: { type: string }
+              value: { type: [integer, 'null'], minimum: 1, maximum: 5 }
+
+    Weight:
+      type: object
+      properties:
+        userId: { type: string, format: uuid }
+        zoneId: { $ref: '#/components/schemas/ZoneId' }
+        weight: { type: number, minimum: 0, maximum: 1 }
+        isMuted: { type: boolean }
+        source: { type: string, enum: [quiz, entry, manual] }
+        updatedAt: { type: string, format: date-time }
+
+    WeightChange:
+      type: object
+      properties:
+        id: { type: integer }
+        zoneId: { $ref: '#/components/schemas/ZoneId' }
+        zone: { $ref: '#/components/schemas/Zone' }
+        oldWeight: { type: [number, 'null'] }
+        newWeight: { type: number }
+        oldMuted: { type: [boolean, 'null'] }
+        newMuted: { type: boolean }
+        source: { type: string, enum: [quiz, entry, manual] }
+        changedAt: { type: string, format: date-time }
+
+    Profile:
+      type: object
+      properties:
+        totalZones: { type: integer, examples: [9] }
+        mutedCount: { type: integer }
+        askedAbout:
+          type: array
+          description: The three zones the diary is currently asking about.
+          items: { $ref: '#/components/schemas/ZoneId' }
+        zones:
+          type: array
+          description: Highest weight first.
+          items:
+            type: object
+            properties:
+              zone: { $ref: '#/components/schemas/Zone' }
+              weight: { type: number }
+              isMuted: { type: boolean }
+              source: { type: string, enum: [quiz, entry, manual] }
+              updatedAt: { type: string, format: date-time }
+              startWeight: { type: [number, 'null'], description: The value the quiz set. }
+              delta: { type: [number, 'null'], description: How far it has moved since then. }
+              askedAbout: { type: boolean }
+
+    TodaysQuestion:
+      type: object
+      properties:
+        promptShownId: { type: string, format: uuid }
+        text: { type: string }
+        zone: { $ref: '#/components/schemas/Zone' }
+        shownAt: { type: string, format: date-time }
+        wasAnswered: { type: boolean }
+        relevanceRating: { type: [boolean, 'null'] }
+        isNew:
+          type: boolean
+          description: False when this question had already been issued today.
+
+    Entry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        text: { type: string }
+        status:
+          type: string
+          enum: [pending, classified, classification_failed]
+          description: |
+            `pending` — saved, not yet analysed (also the state when consent is
+            withdrawn). `classified` — analysed, nine scores exist.
+            `classification_failed` — kept, but the analysis did not succeed.
+        createdAt: { type: string, format: date-time }
+        classifiedAt: { type: [string, 'null'], format: date-time }
+        day: { type: string, format: date }
+        zone:
+          oneOf:
+            - $ref: '#/components/schemas/Zone'
+            - type: 'null'
+          description: The highest-scoring zone, or null when not classified.
+        scores:
+          type: object
+          additionalProperties: { type: number, minimum: 0, maximum: 1 }
+        prompt:
+          type: [object, 'null']
+          properties:
+            promptShownId: { type: string, format: uuid }
+            zoneId: { $ref: '#/components/schemas/ZoneId' }
+            text: { type: string }
+            relevanceRating: { type: [boolean, 'null'] }
+
+    SavedEntry:
+      type: object
+      properties:
+        entry: { $ref: '#/components/schemas/Entry' }
+        analysis:
+          type: string
+          enum: [classified, failed, skipped_no_consent]
+        weightChanges:
+          type: array
+          description: Largest movement first. Empty unless `analysis` is `classified`.
+          items:
+            type: object
+            properties:
+              zoneId: { $ref: '#/components/schemas/ZoneId' }
+              zone: { $ref: '#/components/schemas/Zone' }
+              from: { type: number }
+              to: { type: number }
+              delta: { type: number }
+
+    Calendar:
+      type: object
+      properties:
+        month: { type: string, examples: ['2026-11'] }
+        daysInMonth: { type: integer }
+        firstWeekday: { type: integer, minimum: 0, maximum: 6, description: '0 is Monday.' }
+        days:
+          type: array
+          items:
+            type: object
+            properties:
+              day: { type: string, format: date }
+              dayOfMonth: { type: integer }
+              entryCount: { type: integer }
+              zones:
+                type: array
+                maxItems: 3
+                items: { $ref: '#/components/schemas/Zone' }
+
+    Day:
+      type: object
+      properties:
+        day: { type: string, format: date }
+        question:
+          type: [object, 'null']
+          properties:
+            promptShownId: { type: string, format: uuid }
+            text: { type: string }
+            zone: { $ref: '#/components/schemas/Zone' }
+            selectionReason:
+              type: string
+              enum: [top_three, exploration, baseline_random]
+              description: |
+                Present only here, on a past day that has already been rated,
+                where it can no longer influence the rating.
+            relevanceRating: { type: [boolean, 'null'] }
+            wasAnswered: { type: boolean }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/Entry' }
+
+    Consent:
+      type: object
+      properties:
+        purpose: { type: string, enum: [study, ai_processing] }
+        textVersion: { type: string, examples: ['v1.0'] }
+        grantedAt: { type: string, format: date-time }
+        withdrawnAt: { type: [string, 'null'], format: date-time }
+        active: { type: boolean }
+
+    Export:
+      type: object
+      properties:
+        exportedAt: { type: string, format: date-time }
+        account: { type: object }
+        consents: { type: array, items: { $ref: '#/components/schemas/Consent' } }
+        onboardingAnswers: { type: array, items: { type: object } }
+        weights: { type: array, items: { $ref: '#/components/schemas/Weight' } }
+        weightHistory: { type: array, items: { type: object } }
+        weightChanges: { type: array, items: { $ref: '#/components/schemas/WeightChange' } }
+        entries: { type: array, items: { type: object } }
+        questionsShown: { type: array, items: { type: object } }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: A stable machine-readable code, safe to branch on.
+              examples: [VALIDATION_FAILED, EMAIL_TAKEN, TOO_FEW_ACTIVE_ZONES]
+            message:
+              type: string
+              description: Written for the participant; safe to show in the interface.
+            details:
+              description: On a 422, one entry per field that needs correcting.
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+                  in: { type: string, enum: [body, params, query] }

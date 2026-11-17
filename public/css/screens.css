@@ -1,0 +1,164 @@
+/* ===========================================================================
+   Layout of the individual screens.
+
+   Only arrangement lives here — what sits beside what, and at which width.
+   Appearance belongs to components.css.
+   =========================================================================== */
+
+/* --- auth screens (S-01a, S-01b) ------------------------------------------- */
+.auth-screen { max-width: 460px; margin: 0 auto; }
+.trust { display: flex; flex-direction: column; gap: 9px; margin: var(--gap-4) 0; }
+.trust span { display: flex; gap: 9px; align-items: center; font-size: var(--size-small); color: var(--text-2); }
+.auth-switch { text-align: center; font-size: 14px; color: var(--text-2); margin-top: var(--gap-3); }
+
+@media (min-width: 600px) {
+  .trust { flex-direction: row; flex-wrap: wrap; gap: var(--gap-3) var(--gap-4); }
+}
+
+/* --- the quiz (S-02) -------------------------------------------------------- */
+.quiz-screen { max-width: 580px; margin: 0 auto; }
+.quiz-statement { font-size: 20px; font-weight: 600; line-height: 1.35; margin: 0; }
+.quiz-actions { display: flex; justify-content: space-between; align-items: center; gap: var(--gap-2); margin-top: var(--gap-4); }
+
+/* --- Today (S-03, S-04) -----------------------------------------------------
+   One column on a phone, with the question first: on a small screen what you
+   have to do comes before what you have done. From 960px the profile chart
+   moves to the left and both are visible at once. */
+.today-grid { display: grid; gap: var(--gap-4); }
+.today-profile { order: 2; }
+.today-main { order: 1; }
+
+@media (min-width: 960px) {
+  .today-grid { grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
+  .today-profile { order: 1; position: sticky; top: 84px; }
+  .today-main { order: 2; }
+}
+
+.question {
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: var(--gap-3) 0 var(--gap-4);
+}
+.analyzing { display: flex; gap: 9px; align-items: center; color: var(--accent); font-size: var(--size-small); margin-top: var(--gap-2); }
+.analyzing svg { animation: spin 1.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- the week strip --------------------------------------------------------- */
+.week-block { display: flex; flex-direction: column; gap: var(--gap-2); }
+.weekstrip { display: flex; justify-content: space-between; gap: 4px; flex: 1; }
+.weekday {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: default;
+}
+.weekday .circle {
+  position: relative;
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--divider);
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 600;
+}
+.weekday.has { cursor: pointer; color: var(--text-2); }
+.weekday.has .circle { border-color: transparent; color: var(--text); }
+.weekday.today .circle { box-shadow: 0 0 0 2px var(--base), 0 0 0 3.5px var(--text); color: var(--text); }
+.weekday .ring { position: absolute; inset: 0; }
+.week-summary { display: flex; align-items: baseline; gap: var(--gap-2); }
+.week-summary b { color: var(--text-2); font-size: 14px; }
+
+@media (min-width: 600px) {
+  .weekday .circle { width: 46px; height: 46px; }
+  .week-block { flex-direction: row; align-items: flex-end; gap: var(--gap-4); }
+  .week-summary { flex-direction: column; align-items: flex-end; text-align: right; gap: 0; }
+  .week-summary b { display: block; }
+}
+
+/* --- the radar chart --------------------------------------------------------- */
+/* The chart is drawn with a viewBox, so its text scales with its width. Left
+   to fill a wide card the labels grow to headline size; the cap keeps the
+   chart at the size it was designed for and centres it instead. */
+.radar-wrap { display: block; }
+.radar-wrap svg {
+  display: block;
+  width: 100%;
+  max-width: 330px;
+  height: auto;
+  margin: 0 auto;
+}
+.zone-label { cursor: pointer; transition: opacity var(--t-fast) var(--ease); }
+.radar-wrap svg.focusing .zone-label:not(.on),
+.radar-wrap svg.focusing .zone-axis:not(.on),
+.radar-wrap svg.focusing .zone-point:not(.on) { opacity: .35; }
+.zone-label.on { font-weight: 700; }
+.zone-detail { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: var(--gap-2); font-size: var(--size-small); }
+.zone-detail .v { font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+
+/* --- Profile (S-05) ----------------------------------------------------------- */
+.profile-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--gap-3); flex-wrap: wrap; }
+.trend-pick {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 2px 12px 2px 14px;
+  background: var(--elev);
+  margin: var(--gap-2) 0 var(--gap-3);
+}
+.trend-pick i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.trend-pick select { background: none; border: 0; color: var(--text); font-weight: 600; font-size: var(--size-small); padding: 7px 2px; cursor: pointer; }
+
+/* --- History (S-06) ------------------------------------------------------------
+   The calendar and the chosen day stack on a phone and sit side by side from
+   860px, which is the width at which both stay readable. */
+.history-grid { display: grid; gap: var(--gap-4); }
+@media (min-width: 860px) {
+  .history-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: start; }
+}
+
+.month-head { display: flex; align-items: center; gap: var(--gap-3); margin-bottom: var(--gap-2); }
+.month-head span { font-size: var(--size-tiny); font-weight: 700; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.month-head i { flex: 1; height: 1px; background: var(--divider); }
+
+.month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: var(--gap-3); }
+.month-grid > b { font-size: 10px; font-weight: 700; color: var(--muted); text-align: center; padding-bottom: 2px; }
+.month-day {
+  aspect-ratio: 1;
+  min-height: 40px;                /* never smaller than a comfortable tap */
+  position: relative;
+  border: 1px dashed var(--divider);
+  border-radius: 11px;
+  background: none;
+  color: var(--muted);
+  font-size: var(--size-tiny);
+  text-align: left;
+  padding: 5px 6px;
+  cursor: default;
+}
+.month-day.has { border-style: solid; color: var(--text); font-weight: 700; cursor: pointer; }
+.month-day.pad { border: 0; }
+.month-day.today { outline: 2px solid var(--text); outline-offset: 1px; }
+.month-day[aria-pressed="true"] { background: rgba(155, 140, 255, .16); border-color: var(--accent); }
+.month-day .dots { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 3px; }
+.month-day .dots i { width: 6px; height: 6px; border-radius: 50%; }
+
+.day-entry { border-bottom: 1px solid var(--divider); padding: var(--gap-3) 0; }
+.day-entry:last-child { border-bottom: 0; }
+
+/* --- Settings (S-07) ------------------------------------------------------------ */
+.setting { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--gap-3); flex-wrap: wrap; }
+.setting > div { flex: 1 1 320px; }
+.setting p { font-size: 14px; color: var(--text-2); margin-top: var(--gap-1); }
+
+/* --- the trend chart -------------------------------------------------------------- */
+.chart { display: block; width: 100%; height: auto; }
+.chart-axis { display: flex; justify-content: space-between; font-size: var(--size-tiny); color: var(--muted); margin-top: 4px; }

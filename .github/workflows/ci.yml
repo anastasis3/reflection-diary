@@ -1,0 +1,147 @@
+name: CI
+
+# Runs on every push and on every pull request to the main branch. The point
+# of this file is that a change which breaks the API, the adaptation model or
+# the start-up of the server is visible before it reaches main, rather than
+# when someone next tries to run it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Tests on Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # The current LTS and the current release. Testing on both catches a
+        # dependence on something that only exists in the newer one.
+        node: ['20.x', '22.x']
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        # `npm ci` installs exactly what package-lock.json pins, so CI runs
+        # against the same versions as a developer's machine.
+        run: npm ci
+
+      - name: Check every source file parses
+        run: |
+          find src tests scripts -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Audit dependencies
+        # Advisory: a new high-severity advisory should be seen, but it must
+        # not block a pull request that did not cause it.
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Run the test suite
+        run: npm test
+        env:
+          NODE_ENV: test
+
+  smoke:
+    name: The server starts and answers
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start the server, then walk through the main flow
+        # A test suite can pass while the process itself fails to start —
+        # a bad environment variable, a missing directory. This step runs the
+        # real server and takes an account from registration to a saved entry.
+        run: |
+          npm start &
+          SERVER_PID=$!
+          trap "kill $SERVER_PID" EXIT
+
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health > /dev/null; then break; fi
+            sleep 1
+          done
+
+          echo "--- health ---"
+          curl -sf http://localhost:3000/api/health
+
+          echo "--- the interface is served ---"
+          curl -sf http://localhost:3000/ | grep -q "reflection diary"
+
+          echo "--- the documentation is served ---"
+          curl -sf http://localhost:3000/docs/openapi.yaml | head -1
+
+          echo "--- register ---"
+          TOKEN=$(curl -sf -X POST http://localhost:3000/api/auth/register \
+            -H 'content-type: application/json' \
+            -d '{"email":"ci@example.test","password":"correct horse battery","acceptPrivacyNotice":true,"acceptAiProcessing":true}' \
+            | node -pe 'JSON.parse(require("fs").readFileSync(0)).token')
+          test -n "$TOKEN"
+
+          echo "--- the quiz ---"
+          for ZONE in work people health energy emotion self interest meaning everyday; do
+            curl -sf -X POST http://localhost:3000/api/onboarding/answers \
+              -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+              -d "{\"zoneId\":\"$ZONE\",\"value\":4}" > /dev/null
+          done
+          curl -sf -X POST http://localhost:3000/api/onboarding/complete \
+            -H "authorization: Bearer $TOKEN" > /dev/null
+
+          echo "--- the question of the day ---"
+          curl -sf http://localhost:3000/api/prompts/today -H "authorization: Bearer $TOKEN"
+
+          echo ""
+          echo "--- save an entry ---"
+          curl -sf -X POST http://localhost:3000/api/entries \
+            -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+            -d '{"text":"Three meetings at the office that could have been one message."}' \
+            | node -pe 'const r=JSON.parse(require("fs").readFileSync(0)); if(r.analysis!=="classified") { console.error(r); process.exit(1) } "analysis: "+r.analysis+", moved "+r.weightChanges.length+" zones"'
+
+          echo "--- delete the account again ---"
+          curl -sf -X DELETE http://localhost:3000/api/account -H "authorization: Bearer $TOKEN"
+        env:
+          NODE_ENV: production
+          JWT_SECRET: a-secret-used-only-by-this-ci-run
+          PORT: 3000
+
+  docs:
+    name: The OpenAPI description is valid
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - name: Parse docs/openapi.yaml
+        # A description that no longer parses is worse than none, because the
+        # documentation page silently falls back to an error message.
+        run: npx --yes js-yaml@4.1.0 docs/openapi.yaml > /dev/null
+
+      - name: Check that every route in the code appears in the description
+        # Keeps the two from drifting apart: a new endpoint without a line in
+        # openapi.yaml fails here rather than being noticed months later.
+        run: node scripts/check-docs.js

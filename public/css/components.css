@@ -1,0 +1,419 @@
+/* ===========================================================================
+   The component library from §4 of the UX specification.
+
+   Every screen is built from the pieces below and adds no styling of its own
+   beyond layout. If a screen needs a new look, the component changes here and
+   every screen gets it.
+   =========================================================================== */
+
+/* --- card ----------------------------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-card);
+  padding: var(--gap-4);
+  transition: border-color var(--t-base) var(--ease),
+              transform var(--t-base) var(--ease),
+              box-shadow var(--t-base) var(--ease);
+}
+.card + .card { margin-top: var(--gap-3); }
+.card.glow { border-color: var(--deep); box-shadow: 0 0 24px rgba(108, 92, 224, .2); }
+.card.danger { border-color: var(--error); }
+.card.quiet { background: none; }
+
+@media (hover: hover) {
+  .card:hover { border-color: rgba(155, 140, 255, .5); transform: translateY(-2px); box-shadow: var(--shadow-card); }
+}
+
+/* --- buttons -------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 48px;              /* comfortably tappable */
+  padding: 11px 22px;
+  border: 0;
+  border-radius: var(--radius-input);
+  background: var(--deep);
+  color: #fff;
+  font-size: var(--size-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--t-base) var(--ease),
+              box-shadow var(--t-base) var(--ease),
+              background var(--t-base) var(--ease),
+              border-color var(--t-base) var(--ease);
+}
+.btn.block { width: 100%; }
+.btn.small { min-height: 40px; padding: 8px 16px; font-size: 14px; }
+.btn.ghost {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  min-height: 42px;
+}
+.btn.danger { background: none; border: 1px solid var(--error); color: var(--error); }
+
+@media (hover: hover) {
+  .btn:hover { transform: scale(1.02); box-shadow: var(--shadow-accent); }
+  .btn.ghost:hover { border-color: var(--accent); color: var(--text); }
+  .btn.danger:hover { box-shadow: 0 0 0 3px rgba(255, 155, 138, .14); }
+}
+.btn:active { transform: scale(.98); }
+.btn[disabled], .btn[aria-disabled="true"] {
+  background: var(--track);
+  color: var(--muted);
+  border-color: var(--divider);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.linkbtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font-size: 14px;
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease);
+}
+.linkbtn:hover { color: #C6BDFF; text-decoration: underline; }
+.linkbtn.quiet { color: var(--muted); }
+
+/* --- form fields ---------------------------------------------------------- */
+.field { margin-top: var(--gap-3); }
+.label {
+  display: block;
+  font-size: var(--size-small);
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: var(--gap-1);
+}
+.input, textarea.input {
+  width: 100%;
+  background: var(--elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  padding: 12px 14px;
+  color: var(--text);
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.input::placeholder { color: var(--muted); }
+.input:focus-visible { border-color: var(--accent); }
+.input[aria-invalid="true"] { border-color: var(--error); }
+textarea.input { min-height: 180px; resize: vertical; line-height: 1.6; }
+
+.input-wrap { position: relative; }
+.input-wrap .reveal {
+  position: absolute;
+  right: 10px; top: 50%;
+  transform: translateY(-50%);
+  background: none; border: 0;
+  padding: 6px;
+  cursor: pointer;
+  line-height: 0;
+}
+
+/* The message reserves its height so that showing it does not move the layout. */
+.error-text {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-1);
+  min-height: 20px;
+  margin-top: var(--gap-1);
+  color: var(--error);
+  font-size: var(--size-small);
+  visibility: hidden;
+}
+.error-text.on { visibility: visible; }
+.hint { font-size: var(--size-small); color: var(--muted); margin-top: var(--gap-1); }
+
+/* --- checkbox ------------------------------------------------------------- */
+.consent { display: flex; gap: var(--gap-2); align-items: flex-start; font-size: 14px; color: var(--text-2); }
+.consent input {
+  flex: none;
+  width: 20px; height: 20px;
+  margin-top: 2px;
+  accent-color: var(--deep);
+}
+.consent u { text-underline-offset: 3px; }
+
+.ai-box {
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-input);
+  background: var(--elev);
+  padding: var(--gap-3);
+  margin-top: var(--gap-3);
+}
+.ai-box .note { font-size: var(--size-tiny); color: var(--muted); margin: var(--gap-1) 0 0 30px; }
+
+/* --- chips, pills, badges -------------------------------------------------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 4px 12px;
+  font-size: var(--size-tiny);
+  color: var(--muted);
+}
+
+.zone-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--size-small);
+  font-weight: 600;
+}
+.zone-badge .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: none; }
+
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--gap-4); }
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 8px 14px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text-2);
+  font-size: var(--size-small);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.pill b { color: var(--accent); font-weight: 700; }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.pill[aria-pressed="true"] { background: var(--deep); border-color: var(--accent); color: #fff; }
+.pill[aria-pressed="true"] b { color: #DCD8FA; }
+.pill.empty { border-color: var(--divider); color: var(--muted); }
+.pill.empty b { color: var(--muted); }
+
+/* --- status lines ---------------------------------------------------------- */
+.ok-line {
+  display: flex; align-items: center; gap: 9px;
+  color: var(--ok); font-weight: 600;
+  margin-bottom: var(--gap-3);
+}
+.toast-inline {
+  display: flex; gap: 10px; align-items: flex-start;
+  border-radius: var(--radius-input);
+  padding: 12px 14px;
+  font-size: 14px;
+  margin-bottom: var(--gap-3);
+}
+.toast-inline.info { background: rgba(155, 140, 255, .12); border: 1px solid var(--accent); color: var(--text-2); }
+.toast-inline.warn { background: rgba(255, 155, 138, .12); border: 1px solid var(--error); color: var(--error); }
+.toast-inline.good { background: rgba(61, 219, 168, .08); border: 1px solid var(--ok); color: var(--ok); }
+.toast-inline svg { flex: none; margin-top: 2px; }
+
+/* --- floating toasts ------------------------------------------------------- */
+.toast-area {
+  position: fixed;
+  left: 50%;
+  bottom: calc(80px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  border-radius: var(--radius-input);
+  padding: 12px 14px;
+  font-size: 14px;
+  background: rgba(26, 25, 41, .92);
+  border: 1px solid var(--accent);
+  color: var(--text-2);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: toast-in var(--t-base) var(--ease);
+}
+.toast.warn { border-color: var(--error); color: var(--error); }
+.toast.good { border-color: var(--ok); color: var(--ok); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px); } }
+
+@media (min-width: 960px) { .toast-area { bottom: 24px; } }
+
+/* --- progress steps (the quiz) --------------------------------------------- */
+.steps { display: flex; gap: 5px; margin: var(--gap-3) 0 var(--gap-4); }
+.steps i { flex: 1; height: 6px; border-radius: 3px; background: var(--track); }
+.steps i.done { background: var(--accent); }
+.steps i.now { border: 1px solid var(--accent); background: rgba(155, 140, 255, .25); }
+
+/* --- the 1 to 5 scale ------------------------------------------------------ */
+.scale { display: flex; gap: 8px; margin-top: var(--gap-4); }
+.scale button {
+  flex: 1;
+  min-height: 56px;
+  background: var(--elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-2);
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.scale button[aria-pressed="true"] { background: var(--deep); border-color: var(--accent); color: #fff; }
+.scale-labels {
+  display: flex; justify-content: space-between;
+  font-size: var(--size-tiny); color: var(--muted);
+  margin-top: 8px;
+}
+
+/* --- weight rows (Profile) -------------------------------------------------- */
+.weight-row { padding: 12px 0; border-bottom: 1px solid var(--divider); }
+.weight-row:last-child { border-bottom: 0; }
+.weight-row .name { font-weight: 600; }
+.weight-row .name.off { color: var(--muted); }
+.weight-row .asked {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  color: var(--accent); text-transform: uppercase;
+  margin-left: 8px;
+}
+.weight-row .value { font-variant-numeric: tabular-nums; font-weight: 700; }
+.weight-row .delta { font-size: var(--size-tiny); color: var(--muted); margin-right: 10px; font-variant-numeric: tabular-nums; }
+.weight-row .delta.up { color: var(--ok); }
+
+.bar { height: 10px; background: var(--track); border-radius: 5px; margin-top: 8px; overflow: hidden; }
+.bar span { display: block; height: 100%; border-radius: 5px; transition: width var(--t-slow) var(--ease); }
+
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 10px;
+  border-radius: 5px;
+  background: var(--track);
+  margin-top: 10px;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+  cursor: pointer;
+}
+input[type="range"]:disabled { opacity: .45; cursor: not-allowed; }
+
+/* a switch, for muting a zone */
+.switch {
+  position: relative;
+  width: 44px; height: 26px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--track);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.switch::after {
+  content: "";
+  position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: left var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.switch[aria-checked="true"] { background: var(--deep); border-color: var(--accent); }
+.switch[aria-checked="true"]::after { left: 20px; background: #fff; }
+
+.num-input {
+  width: 72px;
+  text-align: right;
+  background: var(--elev);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 6px 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- rating buttons --------------------------------------------------------- */
+.rate { display: flex; gap: 10px; flex-wrap: wrap; margin-top: var(--gap-3); }
+.rate button {
+  display: inline-flex; align-items: center; gap: 10px;
+  min-height: 48px;
+  padding: 10px 20px;
+  background: var(--elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-2);
+  font-size: 14px;
+  cursor: pointer;
+}
+.rate button[aria-pressed="true"] {
+  border: 2px solid var(--accent);
+  background: rgba(155, 140, 255, .14);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* --- the "Why this question?" accordion -------------------------------------- */
+.explain {
+  border: 1px solid var(--deep);
+  background: var(--elev);
+  border-radius: var(--radius-input);
+  padding: var(--gap-3);
+  margin: var(--gap-3) 0;
+  overflow: hidden;
+  animation: unfold var(--t-base) var(--ease);
+}
+@keyframes unfold {
+  from { opacity: 0; max-height: 0; transform: translateY(6px); padding-top: 0; padding-bottom: 0; margin-top: 0; }
+  to   { opacity: 1; max-height: 420px; transform: translateY(0); }
+}
+.caret { display: inline-block; transition: transform var(--t-base) var(--ease); }
+.caret.open { transform: rotate(90deg); }
+
+/* --- empty state -------------------------------------------------------------- */
+.empty-state { text-align: center; padding: 30px 16px; }
+.empty-state h2 { margin: 12px 0 6px; }
+.empty-state p { color: var(--text-2); font-size: 14px; margin-bottom: var(--gap-4); }
+
+/* --- dialog --------------------------------------------------------------------- */
+.dialog {
+  background: var(--elev);
+  color: var(--text);
+  border: 1px solid var(--deep);
+  border-radius: 20px;
+  padding: var(--gap-4);
+  max-width: 470px;
+  width: calc(100vw - 32px);
+}
+.dialog::backdrop { background: rgba(5, 4, 12, .72); }
+.dialog-actions { display: flex; gap: 10px; margin-top: var(--gap-4); flex-wrap: wrap; }
+
+/* --- quote ----------------------------------------------------------------------- */
+blockquote {
+  margin: 0;
+  padding: 2px 0 2px 14px;
+  border-left: 2px solid rgba(155, 140, 255, .5);
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* --- skeleton, while a screen waits for the API ------------------------------------ */
+.skeleton {
+  border-radius: var(--radius-input);
+  background: linear-gradient(90deg, var(--surface) 25%, var(--elev) 50%, var(--surface) 75%);
+  background-size: 400% 100%;
+  animation: shimmer 1.3s linear infinite;
+  min-height: 16px;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }

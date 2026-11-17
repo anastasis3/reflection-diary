@@ -1,0 +1,209 @@
+/* ===========================================================================
+   Reset, typography and the page frame.
+
+   Mobile first: everything here describes a phone. The media queries at the
+   bottom add what a larger screen allows, and never take anything away.
+   =========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* The `hidden` attribute has to win over any layout rule below. Without this,
+   `.topnav { display: flex }` inside a media query would show a navigation
+   that the markup had hidden, because an author rule beats the browser's
+   own styling of the attribute. */
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--base);
+  color: var(--text);
+  font: 400 var(--size-body)/1.6 var(--font);
+  min-height: 100dvh;
+  overflow-wrap: break-word; /* a long word in an entry must not widen the page */
+}
+
+h1, h2, h3, p, ul, ol, figure { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+img, svg { max-width: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+h1 { font-size: var(--size-h1); font-weight: 700; line-height: 1.25; letter-spacing: -.01em; }
+h2 { font-size: var(--size-h2); font-weight: 700; line-height: 1.3; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* --- focus ---------------------------------------------------------------
+   One visible focus ring everywhere, on an offset so it is never swallowed
+   by the element's own border (WCAG 2.4.7). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  z-index: 100;
+  padding: 10px 16px;
+  background: var(--elev);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-input);
+}
+.skip-link:focus { left: var(--page-gutter); top: 10px; }
+
+/* --- the frame ----------------------------------------------------------- */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-3);
+  padding: 12px var(--page-gutter);
+  padding-top: max(12px, env(safe-area-inset-top));
+  border-bottom: 1px solid var(--divider);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--base) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 700;
+  font-size: var(--size-small);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.brand:hover { text-decoration: none; }
+.brand-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px 1px rgba(155, 140, 255, .55);
+}
+
+main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--gap-4) var(--page-gutter) calc(84px + env(safe-area-inset-bottom));
+}
+main:focus { outline: none; }
+
+.loading { color: var(--muted); text-align: center; padding: 40px 0; }
+
+/* --- navigation ----------------------------------------------------------
+   Two navigations, one of which is always hidden. On a phone the bar sits at
+   the bottom within thumb reach; from 960px it moves into the header. */
+.topnav { display: none; gap: 2px; }
+.topnav a {
+  color: var(--text-2);
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.topnav a:hover { background: rgba(155, 140, 255, .1); color: var(--text); text-decoration: none; }
+.topnav a[aria-current="page"] {
+  background: rgba(155, 140, 255, .16);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.bottomnav {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  padding: 6px 6px max(6px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--divider);
+}
+.bottomnav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 2px;
+  min-height: 52px;              /* a comfortable touch target (WCAG 2.5.8) */
+  border-radius: var(--radius-input);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.bottomnav a:hover { text-decoration: none; color: var(--text-2); }
+.bottomnav a[aria-current="page"] { color: var(--accent); background: rgba(155, 140, 255, .12); }
+.bottomnav .ico { display: block; height: 20px; }
+.bottomnav svg { display: block; }
+
+/* --- layout helpers ------------------------------------------------------ */
+.sub { color: var(--text-2); font-size: 14px; margin-top: 6px; }
+.page-head { margin-bottom: var(--gap-4); }
+.stack > * + * { margin-top: var(--gap-3); }
+.row { display: flex; align-items: center; gap: var(--gap-2); flex-wrap: wrap; }
+.spread { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-2); }
+.meta { font-size: var(--size-tiny); color: var(--muted); }
+.hr { height: 1px; background: var(--divider); margin: var(--gap-4) 0; border: 0; }
+
+/* Visible to a screen reader only. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   600px and up — a phone held in landscape, or a small tablet.
+   --------------------------------------------------------------------------- */
+@media (min-width: 600px) {
+  :root { --page-gutter: 24px; --size-h1: 30px; }
+}
+
+/* ---------------------------------------------------------------------------
+   960px and up — desktop. The navigation moves into the header and the Today
+   screen puts the profile chart beside the question instead of above it.
+   --------------------------------------------------------------------------- */
+@media (min-width: 960px) {
+  :root { --page-gutter: 32px; }
+  .topnav { display: flex; }
+  .bottomnav { display: none; }
+  main { padding-bottom: var(--gap-5); }
+}
+
+/* ---------------------------------------------------------------------------
+   Respect a reduced-motion preference: every transition and animation in the
+   project is defined through the variables above or named here, so this one
+   block switches all of them off (WCAG 2.3.3).
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  :root { --t-fast: 0s; --t-base: 0s; --t-slow: 0s; }
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

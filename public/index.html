@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!--
+    viewport-fit=cover plus the safe-area insets in base.css keep the bottom
+    navigation clear of the home indicator on a phone.
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="colour-scheme" content="dark">
+  <meta name="theme-color" content="#0C0B14">
+  <meta name="description" content="A reflection diary that asks one question a day, chosen from what you write about.">
+  <title>Reflection diary</title>
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%239B8CFF'/></svg>">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/screens.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#/today" aria-label="Reflection diary, go to today">
+        <span class="brand-dot" aria-hidden="true"></span>
+        reflection diary
+      </a>
+      <nav class="topnav" id="topnav" aria-label="Main" hidden>
+        <a href="#/today" data-screen="today">Today</a>
+        <a href="#/profile" data-screen="profile">Profile</a>
+        <a href="#/history" data-screen="history">History</a>
+        <a href="#/settings" data-screen="settings">Settings</a>
+      </nav>
+    </header>
+
+    <main id="main" tabindex="-1" aria-live="polite" aria-busy="true">
+      <p class="loading">Loading…</p>
+    </main>
+
+    <!--
+      On a phone the same four destinations sit at the bottom, within thumb
+      reach; the stylesheet shows one or the other, never both.
+    -->
+    <nav class="bottomnav" id="bottomnav" aria-label="Main" hidden>
+      <a href="#/today" data-screen="today"><span class="ico" data-icon="today"></span>Today</a>
+      <a href="#/profile" data-screen="profile"><span class="ico" data-icon="profile"></span>Profile</a>
+      <a href="#/history" data-screen="history"><span class="ico" data-icon="history"></span>History</a>
+      <a href="#/settings" data-screen="settings"><span class="ico" data-icon="settings"></span>Settings</a>
+    </nav>
+  </div>
+
+  <div class="toast-area" id="toasts" aria-live="polite" aria-atomic="false"></div>
+  <dialog id="dialog" class="dialog"><div id="dialog-body"></div></dialog>
+
+  <script type="module" src="js/app.js"></script>
+  <noscript>
+    <p style="padding:24px;color:#F0EFFB">
+      This diary needs JavaScript to run. The API it talks to is documented at
+      <a href="/docs/" style="color:#9B8CFF">/docs/</a>.
+    </p>
+  </noscript>
+</body>
+</html>

@@ -11,10 +11,10 @@ export const create = asyncHandler(async (req, res) => {
 /** GET /api/entries?zone=&from=&to= */
 export const list = asyncHandler(async (req, res) => {
   const { zone, from, to } = req.validated.query;
-  res.json({ entries: entriesService.list(req.user.id, { zoneId: zone, from, to }) });
+  res.json({ entries: await entriesService.list(req.user.id, { zoneId: zone, from, to }) });
 });
 
 /** GET /api/entries/:id */
 export const getOne = asyncHandler(async (req, res) => {
-  res.json({ entry: entriesService.getById(req.user.id, req.validated.params.id) });
+  res.json({ entry: await entriesService.getById(req.user.id, req.validated.params.id) });
 });

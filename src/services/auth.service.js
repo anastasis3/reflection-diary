@@ -1,33 +1,36 @@
 /**
  * Registration, log in, and the access token.
  *
- * Registration does four things in one step, because an account that exists
- * without them is not usable: it creates the credentials, the profile row, the
- * two consent rows, and nothing else — the nine weights are created later, by
- * the onboarding quiz, from the participant's own answers.
+ * Registration creates, in one step, everything an account needs to be
+ * usable: the account itself (memory driver: a password hash; Supabase: a
+ * user in Supabase Auth), the profile row with the optional name, and the two
+ * consent rows. The nine weights come later, from the onboarding quiz.
+ *
+ * The access token is this API's own JWT whichever driver is used. With
+ * Supabase, Auth checks the password and the API then issues its token, so
+ * every later request is verified locally, without a call to Supabase.
  */
 import jwt from 'jsonwebtoken';
 import config from '../config/index.js';
 import ApiError from '../utils/ApiError.js';
-import { hashPassword, verifyPassword } from '../utils/password.js';
-import * as usersRepo from '../repositories/users.repo.js';
-import * as profilesRepo from '../repositories/profiles.repo.js';
-import * as consentsRepo from '../repositories/consents.repo.js';
+import { accountsRepo, profilesRepo, consentsRepo } from '../repositories/index.js';
 
-/** What the client is allowed to see about an account. Never the hash. */
-export function publicUser(user) {
-  const profile = profilesRepo.findById(user.id);
+/** What the client may see about an account. */
+export async function publicUser(account) {
+  const profile = await profilesRepo.findById(account.id);
   return {
-    id: user.id,
-    email: user.email,
-    createdAt: user.createdAt,
+    id: account.id,
+    email: account.email,
+    // null = no name given; the greeting then simply has no name in it
+    displayName: profile?.displayName ?? null,
+    createdAt: account.createdAt,
     onboardingCompleted: Boolean(profile?.onboardingCompletedAt),
-    aiProcessingConsent: consentsRepo.isActive(user.id, 'ai_processing'),
+    aiProcessingConsent: await consentsRepo.isActive(account.id, 'ai_processing'),
   };
 }
 
-export function issueToken(user) {
-  return jwt.sign({ sub: user.id, email: user.email }, config.auth.jwtSecret, {
+export function issueToken(account) {
+  return jwt.sign({ sub: account.id, email: account.email }, config.auth.jwtSecret, {
     expiresIn: config.auth.jwtExpiresIn,
   });
 }
@@ -40,49 +43,48 @@ export function verifyToken(token) {
   }
 }
 
-export async function register({ email, password, acceptPrivacyNotice, acceptAiProcessing }) {
-  if (usersRepo.findByEmail(email)) {
-    // Deliberately explicit. Hiding it would not protect anything here: the
-    // registration form has to tell the person why the button does nothing.
-    throw ApiError.conflict('EMAIL_TAKEN', 'An account with this e-mail already exists.');
-  }
+/** '' or spaces → null; otherwise trimmed. Length is checked by the schema. */
+export function cleanName(name) {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  return trimmed === '' ? null : trimmed;
+}
+
+export async function register({ email, password, name, acceptPrivacyNotice, acceptAiProcessing }) {
   if (!acceptPrivacyNotice || !acceptAiProcessing) {
     throw ApiError.badRequest(
       'Both consents are required: the diary cannot choose questions without analysing the text of your entries.',
     );
   }
 
-  const passwordHash = await hashPassword(password);
-  const user = usersRepo.create({ email, passwordHash });
+  // Throws EMAIL_TAKEN (409) if the address is already registered. That is
+  // deliberately explicit: the form has to say why the button did nothing.
+  const account = await accountsRepo.createUser({ email, password });
 
-  profilesRepo.create(user.id);
-  consentsRepo.grant(user.id, 'study');
-  consentsRepo.grant(user.id, 'ai_processing');
+  await profilesRepo.create(account.id, { displayName: cleanName(name) });
+  await consentsRepo.grant(account.id, 'study');
+  await consentsRepo.grant(account.id, 'ai_processing');
 
-  return { user: publicUser(user), token: issueToken(user) };
+  return { user: await publicUser(account), token: issueToken(account) };
 }
 
 export async function login({ email, password }) {
-  const user = usersRepo.findByEmail(email);
-
-  // The same message either way, so the response cannot be used to find out
+  const account = await accountsRepo.verifyCredentials(email, password);
+  // One message for both cases, so the response cannot be used to find out
   // which e-mail addresses are registered.
-  const invalid = ApiError.unauthorized('E-mail or password is incorrect.');
-  if (!user) {
-    // Still spend the time hashing, so a missing account is not detectably
-    // faster than a wrong password.
-    await hashPassword(password);
-    throw invalid;
-  }
-  if (!(await verifyPassword(password, user.passwordHash))) throw invalid;
-
-  return { user: publicUser(user), token: issueToken(user) };
+  if (!account) throw ApiError.unauthorized('E-mail or password is incorrect.');
+  return { user: await publicUser(account), token: issueToken(account) };
 }
 
-export function currentUser(userId) {
-  const user = usersRepo.findById(userId);
-  if (!user) throw ApiError.unauthorized('This account no longer exists.');
-  return publicUser(user);
+export async function currentUser(userId, email) {
+  const profile = await profilesRepo.findById(userId);
+  if (!profile) throw ApiError.unauthorized('This account no longer exists.');
+  return publicUser({ id: userId, email, createdAt: profile.createdAt });
 }
 
-export default { register, login, currentUser, issueToken, verifyToken, publicUser };
+/** Settings → "What should the diary call you?" */
+export async function setName(userId, email, name) {
+  await profilesRepo.setDisplayName(userId, cleanName(name));
+  return currentUser(userId, email);
+}
+
+export default { register, login, currentUser, setName, issueToken, verifyToken, publicUser, cleanName };

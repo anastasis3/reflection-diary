@@ -18,5 +18,5 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const me = asyncHandler(async (req, res) => {
-  res.json({ user: authService.currentUser(req.user.id) });
+  res.json({ user: await authService.currentUser(req.user.id, req.user.email) });
 });

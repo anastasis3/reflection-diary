@@ -1,7 +1,7 @@
 {
   "name": "reflection-diary",
   "version": "1.0.0",
-  "description": "Adaptive Self-Reflection Diary with AI-Based Personalization — Node.js API and vanilla front-end",
+  "description": "Adaptive Self-Reflection Diary with AI-Based Personalization — Node.js API (memory or Supabase) and vanilla front-end",
   "type": "module",
   "engines": {
     "node": ">=20.11.0"
@@ -12,7 +12,8 @@
     "dev": "node --watch src/server.js",
     "test": "node --test",
     "test:coverage": "node --test --experimental-test-coverage",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "db:migrate": "node scripts/migrate.js"
   },
   "keywords": [
     "reflection",
@@ -24,10 +25,12 @@
   "author": "Anastasiya Kupreichyk",
   "license": "MIT",
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "pg": "^8.23.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

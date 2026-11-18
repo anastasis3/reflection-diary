@@ -98,25 +98,29 @@ answers with `weight = (answer − 1) / 4`, so a 1–5 scale becomes 0.00–1.00
 Completing is refused while any statement is unanswered, and `details.missing`
 lists which.
 
-### Questions
+### Questions — three a day
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/prompts/today` | The question of the day. |
+| GET | `/prompts/today` | Today's three questions. |
+| POST | `/prompts/{id}/choose` | The participant picked this one; its zone moves up 0.03, once. |
 | GET | `/prompts/{id}/explanation` | "Why this question?" |
-| POST | `/prompts/{id}/rating` | `{ "relevant": true }` |
+| POST | `/prompts/{id}/rating` | `{ "relevant": true }` — only after answering. |
 
-One question per calendar day. Asking again the same day returns the same
-question with `isNew: false`, so a reload or a second device cannot hand out a
-second one.
+Three questions on three different zones, in shuffled slots 1–3. Created on
+the first call of the day and stored; later calls that day return the same
+three with `isNew: false`.
 
-**The response does not say why the question was chosen.** A participant who
-could see that today's question was drawn at random would rate it differently,
-and the comparison the whole study rests on would be worthless. The reason is
-stored in `prompts_shown.selection_reason` and read only for the analysis.
+**The response does not say why each question was offered**, and neither does
+History. A participant who could see which one was random would choose and
+rate differently. The reason is stored in `prompts_shown.selection_reason` and
+read only for the analysis.
 
-Rating is optional. An absent rating means *not rated*, never *disliked* — the
-analysis counts liked questions among the rated ones only.
+`choose` records the pick (the main outcome of the study) and returns
+`boost: { zone, from, to }` the first time, `null` after. Only today's
+questions can be picked or answered (`409 QUESTION_EXPIRED`). Rating before
+answering is refused (`409 NOT_ANSWERED`). An absent rating means *not rated*,
+never *disliked*.
 
 ### Entries
 
@@ -133,8 +137,9 @@ analysis counts liked questions among the rated ones only.
   "promptShownId": "7f1c…" }
 ```
 
-Four steps in this order: the text is saved, it is linked to the question, it
-is analysed, the weights move. **This is the only point at which the text of an
+Four steps in this order: the text is saved, it is linked to the question (and
+counts as the pick, if `choose` was not called), it is analysed, the weights
+move. A question answers at most one entry (`409 ALREADY_ANSWERED`). **This is the only point at which the text of an
 entry is sent for analysis — never while the participant is typing.**
 
 Steps three and four can fail without taking step one with them. The `analysis`
@@ -153,6 +158,8 @@ All three return `201`, because in all three the entry exists.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/profile` | The nine weights, highest first. |
+| GET | `/profile/insight` | The one-sentence card: top zone, mentions, next, quiet zone. |
+| GET | `/profile/history?days=7` | The whole profile on each of the last days (week strip). |
 | PATCH | `/profile/weights` | Edit by hand: `{ "zones": [{ "zoneId": "work", "weight": 0.4 }] }` |
 | GET | `/profile/trend?zone=work&days=30` | One zone over time. |
 | GET | `/profile/changes` | Every change, with its cause. |
@@ -174,7 +181,7 @@ invented for a day nothing was written.
 | --- | --- | --- |
 | GET | `/history/summary` | Entries per zone, for the filter pills. |
 | GET | `/history/calendar?month=2026-11` | The month as a calendar. |
-| GET | `/history/day/2026-11-17` | One day: question, rating, entries. |
+| GET | `/history/day/2026-11-17` | One day: the three questions, the entries, the ratings. |
 
 All nine zones are returned by the summary, including the empty ones. The
 calendar returns every day of the month, including the empty ones —
@@ -188,6 +195,7 @@ an error.
 | GET | `/account/consents` | Both consents, with when each was given and withdrawn. |
 | DELETE | `/account/consents/ai-processing` | Stop the analysis. |
 | POST | `/account/consents/ai-processing` | Give the consent again. |
+| PATCH | `/account/name` | `{ "name": "Mia" }` or `{ "name": null }` — the greeting. |
 | GET | `/account/export` | Everything stored about this account, as JSON. |
 | DELETE | `/account` | Delete the account and all of its data. |
 
@@ -216,17 +224,15 @@ choosing a question. It is not a measure of well-being.
 
 **Weights.** One per zone, 0.00–1.00. Set by the quiz, then moved by entries.
 
-**Choosing a question** (`src/services/selection.service.js`):
+**Three questions a day** (`src/services/selection.service.js`):
 
-1. with probability `RANDOM_QUESTION_SHARE` (0.33) — a question drawn at random
-   from the whole bank: `baseline_random`, the control condition;
-2. otherwise with probability `EXPLORATION_RATE` (0.15) — the quietest
-   non-muted zone: `exploration`, so the profile cannot narrow onto three
-   topics for ever;
-3. otherwise one of the three highest-weighted zones: `top_three`.
+1. slot A — one of the three highest zones, weighted by weight: `top_three`;
+2. slot B — another of the top three, or with `EXPLORATION_RATE` (0.15) one of
+   the quietest zones: `top_three` / `exploration`;
+3. slot C — a zone drawn at random from the rest: `baseline_random`, the control.
 
-A muted zone is never chosen, and yesterday's zone is excluded so the same
-topic is not asked two days running.
+Muted zones are never offered; the three are shuffled. Picking one moves its
+zone up by `CHOICE_BOOST` (0.03) once.
 
 **Moving the weights** (`src/services/adaptation.service.js`):
 
@@ -237,8 +243,9 @@ new = 0.3 × score + 0.7 × old
 An exponential moving average: slow, so one unusual day does not rewrite the
 profile, and reversible, so a topic that stops appearing fades on its own.
 
-**The study.** Every participant receives both kinds of question, so each is
-compared against themselves — a within-subject design. The main outcome is the
-share of questions rated relevant among the adaptive ones against the random
-ones, per participant. `exploration` counts as adaptive: it is produced by the
-model, not by chance.
+**The study.** Every participant receives both kinds of question every day, so
+each is compared against themselves — a within-subject design. The main
+outcome is which question is picked first: blind picking would land on an
+adaptive one two times in three (66.7 %). The second is the share rated
+relevant, adaptive against random. `exploration` counts as adaptive: it is
+produced by the model, not by chance.

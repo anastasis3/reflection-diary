@@ -1,78 +1,102 @@
 /**
- * Choosing the question of the day.
+ * Choosing the three questions of the day.
  *
- * The rule, in order:
+ * Each day the diary offers three questions on three different zones, and the
+ * participant picks the one that fits. The three are chosen like this:
  *
- *   1. With probability RANDOM_QUESTION_SHARE (0.33 by default) the question
- *      is drawn uniformly from the whole bank. This is the control condition
- *      of the study. The participant is never told which kind they received,
- *      and the coin is flipped at selection time, so neither they nor the
- *      interface can anticipate it.
- *   2. Otherwise, with probability EXPLORATION_RATE (0.15), a quiet zone is
- *      chosen — the lowest-weighted zone that is not muted. Without this the
- *      profile would narrow onto the same three topics for ever and could
- *      never discover that something else has become important.
- *   3. Otherwise, one of the three highest-weighted zones, at random.
+ *   slot A  one of the three highest-weighted zones, more often the higher
+ *           its weight                                       → top_three
+ *   slot B  another of the top three — or, with probability
+ *           EXPLORATION_RATE (0.15), one of the quietest zones → top_three /
+ *                                                               exploration
+ *   slot C  a zone drawn uniformly from the rest: the control → baseline_random
  *
- * On top of that: a muted zone is never chosen, and the zone asked about
- * yesterday is excluded, so the same topic never comes two days running.
+ * Muted zones are never offered. The three are then shuffled into slots 1-3
+ * and look identical on screen, so the random one cannot be spotted.
  *
- * `chooseZone` takes everything it needs as arguments, including the source of
- * randomness. That is what makes the rule testable: a test passes a fake
- * `random` and gets a predictable branch, instead of running the function a
- * thousand times and hoping.
+ * What the study measures from this: which question gets picked first. If
+ * the participant picked blindly, two picks in three would land on an
+ * adaptive question (A or B). Picking them more often than that is evidence
+ * that the selection matches what the person wants to write about.
+ *
+ * Note for the methodology: slot C is drawn from the zones *not* already in
+ * A and B, so the control is "a random other zone", not "any zone". That is
+ * needed to keep the three zones different, and it biases the control very
+ * slightly away from the top zones.
+ *
+ * `chooseThree` takes everything as arguments, including the source of
+ * randomness, so a test can pass a fake `random` and get a known result.
  */
 import config from '../config/index.js';
-import { promptsForZone } from '../data/prompts.js';
+import { promptsForZone, getPrompt } from '../data/prompts.js';
 import ApiError from '../utils/ApiError.js';
-import * as weightsRepo from '../repositories/weights.repo.js';
-import * as promptsShownRepo from '../repositories/promptsShown.repo.js';
-import { ZONE_IDS } from '../data/zones.js';
+import { weightsRepo, promptsShownRepo } from '../repositories/index.js';
+import { getZone, ZONE_IDS } from '../data/zones.js';
 import { toDay } from '../utils/dates.js';
+
+/** Picks from `list` with probability proportional to weight. */
+function weightedPick(list, random) {
+  const total = list.reduce((sum, w) => sum + w.weight, 0);
+  if (total <= 0) return list[Math.floor(random() * list.length)];
+  let r = random() * total;
+  for (const w of list) {
+    r -= w.weight;
+    if (r <= 0) return w;
+  }
+  return list[list.length - 1];
+}
 
 /**
  * The pure decision. No database, no clock, no global randomness.
  *
- * @param {object}   input
+ * @param {object} input
  * @param {Array<{zoneId: string, weight: number, isMuted: boolean}>} input.weights
- * @param {string|null} [input.excludeZone] zone asked about yesterday
  * @param {() => number} [input.random] source of randomness, [0, 1)
- * @param {object}   [input.settings] overrides for the three parameters
- * @returns {{zoneId: string, reason: 'top_three'|'exploration'|'baseline_random'}}
+ * @param {object} [input.settings] overrides for explorationRate / topN
+ * @returns {Array<{zoneId: string, reason: string, slot: number}>} three, shuffled
  */
-export function chooseZone({ weights, excludeZone = null, random = Math.random, settings } = {}) {
-  const { randomQuestionShare, explorationRate, topN } = { ...config.adaptation, ...settings };
+export function chooseThree({ weights, random = Math.random, settings } = {}) {
+  const { explorationRate, topN } = { ...config.adaptation, ...settings };
 
-  const available = weights.filter((w) => !w.isMuted && w.zoneId !== excludeZone);
-
-  // If excluding yesterday's zone leaves nothing (everything else is muted),
-  // allow it back rather than failing to ask a question at all.
-  const pool = available.length > 0 ? available : weights.filter((w) => !w.isMuted);
-
-  if (pool.length === 0) {
+  const live = weights.filter((w) => !w.isMuted).sort((a, b) => b.weight - a.weight);
+  if (live.length < 3) {
     throw ApiError.conflict(
       'NO_ACTIVE_ZONES',
-      'All your zones are muted, so there is nothing to ask about. Turn at least three back on in Profile.',
+      'Fewer than three zones are on, so there is nothing to choose between. Turn some back on in Profile.',
     );
   }
 
-  const pick = (list) => list[Math.floor(random() * list.length)];
+  const top = live.slice(0, topN);
+  const quiet = live.slice(topN);
 
-  // 1. the control condition
-  if (random() < randomQuestionShare) {
-    return { zoneId: pick(pool).zoneId, reason: 'baseline_random' };
+  const a = weightedPick(top, random);
+
+  let b;
+  let bReason = 'top_three';
+  if (quiet.length > 0 && random() < explorationRate) {
+    // one of the (up to) three quietest zones
+    const tail = quiet.slice(-3);
+    b = tail[Math.floor(random() * tail.length)];
+    bReason = 'exploration';
+  } else {
+    b = weightedPick(top.filter((w) => w.zoneId !== a.zoneId), random);
   }
 
-  const ranked = [...pool].sort((a, b) => b.weight - a.weight);
+  const rest = live.filter((w) => w.zoneId !== a.zoneId && w.zoneId !== b.zoneId);
+  const c = rest[Math.floor(random() * rest.length)];
 
-  // 2. exploration: the quietest zone still in play
-  if (random() < explorationRate) {
-    const quietest = ranked[ranked.length - 1];
-    return { zoneId: quietest.zoneId, reason: 'exploration' };
+  const three = [
+    { zoneId: a.zoneId, reason: 'top_three' },
+    { zoneId: b.zoneId, reason: bReason },
+    { zoneId: c.zoneId, reason: 'baseline_random' },
+  ];
+
+  // Fisher–Yates shuffle into screen positions
+  for (let i = three.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [three[i], three[j]] = [three[j], three[i]];
   }
-
-  // 3. the adaptive case
-  return { zoneId: pick(ranked.slice(0, topN)).zoneId, reason: 'top_three' };
+  return three.map((q, i) => ({ ...q, slot: i + 1 }));
 }
 
 /** Picks one active question from a zone. */
@@ -85,17 +109,17 @@ export function choosePrompt(zoneId, random = Math.random) {
 }
 
 /**
- * The question of the day for one participant.
+ * The three questions of today for one participant.
  *
- * One question per calendar day: asking again on the same day returns the same
- * question, so a reload or a second device cannot hand out a second one and
- * quietly spoil the measurement.
+ * Created on the first request of the day and stored; every later request
+ * that day — a reload, a second device — returns the same three, so nobody
+ * can re-roll the questions and quietly spoil the measurement.
  */
-export function questionOfTheDay(userId, { random = Math.random, day = toDay() } = {}) {
-  const existing = promptsShownRepo.findForDay(userId, day);
-  if (existing) return { shown: existing, isNew: false };
+export async function todaysQuestions(userId, { random = Math.random, day = toDay() } = {}) {
+  const existing = await promptsShownRepo.listForDay(userId, day);
+  if (existing.length > 0) return { day, questions: existing, isNew: false };
 
-  const weights = weightsRepo.listForUser(userId);
+  const weights = await weightsRepo.listForUser(userId);
   if (weights.length === 0) {
     throw ApiError.conflict(
       'ONBOARDING_INCOMPLETE',
@@ -103,62 +127,66 @@ export function questionOfTheDay(userId, { random = Math.random, day = toDay() }
     );
   }
 
-  const excludeZone = promptsShownRepo.lastZoneBefore(userId, day);
-  const { zoneId, reason } = chooseZone({ weights, excludeZone, random });
-  const prompt = choosePrompt(zoneId, random);
+  const three = chooseThree({ weights, random }).map((q) => ({
+    zoneId: q.zoneId,
+    selectionReason: q.reason,
+    slot: q.slot,
+    promptId: choosePrompt(q.zoneId, random).id,
+  }));
 
-  const shown = promptsShownRepo.create({
-    userId,
-    promptId: prompt.id,
-    zoneId,
-    selectionReason: reason,
-  });
-  return { shown, isNew: true };
+  const questions = await promptsShownRepo.createDay(userId, day, three);
+  return { day, questions, isNew: true };
 }
 
 /** The three zones the diary is currently asking about, highest first. */
-export function topZones(userId, n = config.adaptation.topN) {
-  return weightsRepo
-    .activeForUser(userId)
+export async function topZones(userId, n = config.adaptation.topN) {
+  const weights = await weightsRepo.listForUser(userId);
+  return weights
+    .filter((w) => !w.isMuted)
     .sort((a, b) => b.weight - a.weight)
     .slice(0, n)
     .map((w) => w.zoneId);
 }
 
 /**
- * The text behind "Why this question?" on screen S-03a.
+ * The text behind "Why this question?".
  *
  * It states the real reason, including when the reason was chance. Telling a
  * participant that a randomly drawn question was chosen for them would make
- * the explanation a lie and the study's relevance measurement worthless.
+ * the explanation a lie and the measurement worthless. (The reason is shown
+ * only when asked for, after the choice — never on the three cards.)
  */
-export function explain(userId, shown) {
-  const weight = weightsRepo.find(userId, shown.zoneId)?.weight ?? 0;
-  const rank = topZones(userId, ZONE_IDS.length).indexOf(shown.zoneId) + 1;
+export async function explain(userId, shown) {
+  const weight = (await weightsRepo.find(userId, shown.zoneId))?.weight ?? 0;
+  const rank = (await topZones(userId, ZONE_IDS.length)).indexOf(shown.zoneId) + 1;
+  const label = getZone(shown.zoneId)?.name ?? shown.zoneId;
 
-  switch (shown.selectionReason) {
-    case 'top_three':
-      return {
-        reason: shown.selectionReason,
-        weight,
-        rank,
-        text: `This zone is among your most relevant right now (weight ${weight.toFixed(2)}). Yesterday's question was about a different zone, which is excluded today.`,
-      };
-    case 'exploration':
-      return {
-        reason: shown.selectionReason,
-        weight,
-        rank,
-        text: `This is one of your quieter zones (weight ${weight.toFixed(2)}). The diary asks about one from time to time, so that a topic that is becoming important to you is not missed.`,
-      };
-    default:
-      return {
-        reason: shown.selectionReason,
-        weight,
-        rank,
-        text: 'This question was drawn at random rather than from your profile. The diary does this for about one question in three, so that it can tell whether the chosen ones actually suit you better.',
-      };
-  }
+  const text = {
+    top_three: `${label} is among your most relevant zones right now (weight ${weight.toFixed(2)}).`,
+    exploration: `${label} is one of your quieter zones right now (weight ${weight.toFixed(2)}). The diary offers one now and then, so that a topic that is becoming important is not missed.`,
+    baseline_random:
+      'This one was drawn at random rather than from your profile. One of the three questions each day is, so that the diary can tell whether its own choices suit you better.',
+  }[shown.selectionReason];
+
+  return { reason: shown.selectionReason, weight, rank, text };
 }
 
-export default { chooseZone, choosePrompt, questionOfTheDay, topZones, explain };
+/** A shown-question row as the browser may see it — without the reason. */
+export function presentQuestion(shown) {
+  return {
+    promptShownId: shown.id,
+    slot: shown.slot,
+    day: shown.shownOn,
+    text: getPrompt(shown.promptId)?.text ?? null,
+    zone: getZone(shown.zoneId),
+    wasChosen: shown.wasChosen,
+    wasAnswered: shown.wasAnswered,
+    entryId: shown.entryId,
+    relevanceRating: shown.relevanceRating,
+    // selectionReason is deliberately absent. A participant who could see
+    // which question was the random one would choose and rate differently,
+    // and the comparison the study rests on would be worthless.
+  };
+}
+
+export default { chooseThree, choosePrompt, todaysQuestions, topZones, explain, presentQuestion };

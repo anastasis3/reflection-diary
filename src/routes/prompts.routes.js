@@ -8,6 +8,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/today', controller.today);
+router.post('/:id/choose', validate({ params: idParamSchema }), controller.choose);
 router.get('/:id/explanation', validate({ params: idParamSchema }), controller.explanation);
 router.post(
   '/:id/rating',

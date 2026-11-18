@@ -68,9 +68,10 @@ test('a badly written month is refused with a usable message', async () => {
   assert.match(response.body.error.details[0].message, /YYYY-MM/);
 });
 
-test('one day returns its question, its entry and how it was rated', async () => {
+test('one day returns its three questions, the entry and how it was rated', async () => {
   const session = await registerAndOnboard(app);
-  const { body: question } = await session.auth(request(app).get('/api/prompts/today'));
+  const { body: todays } = await session.auth(request(app).get('/api/prompts/today'));
+  const question = todays.questions[0];
 
   await session.auth(
     request(app)
@@ -85,8 +86,11 @@ test('one day returns its question, its entry and how it was rated', async () =>
 
   assert.equal(status, 200);
   assert.equal(body.day, today);
-  assert.equal(body.question.relevanceRating, true);
-  assert.equal(body.question.wasAnswered, true);
+  assert.equal(body.questions.length, 3);
+  const answered = body.questions.find((q) => q.promptShownId === question.promptShownId);
+  assert.equal(answered.relevanceRating, true);
+  assert.equal(answered.wasAnswered, true);
+  assert.equal(body.questions.filter((q) => q.wasAnswered).length, 1);
   assert.equal(body.entries.length, 1);
   assert.match(body.entries[0].text, /sister/);
 });
@@ -97,7 +101,7 @@ test('a day with nothing on it is a valid answer, not an error', async () => {
 
   assert.equal(status, 200);
   assert.equal(body.entries.length, 0);
-  assert.equal(body.question, null);
+  assert.deepEqual(body.questions, []);
 });
 
 test('a malformed day is refused', async () => {

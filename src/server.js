@@ -5,11 +5,11 @@
  * is about handling a request. See src/app.js for the application itself.
  */
 import config, { checkConfig } from './config/index.js';
-import store from './data/store.js';
+import { initStorage } from './repositories/index.js';
 import { createApp } from './app.js';
 
 checkConfig();
-store.load();
+const storage = await initStorage();
 
 const app = createApp();
 
@@ -18,17 +18,24 @@ const server = app.listen(config.port, () => {
   console.log(`  interface      http://localhost:${config.port}/`);
   console.log(`  API            http://localhost:${config.port}/api/health`);
   console.log(`  documentation  http://localhost:${config.port}/docs/`);
-  console.log(`  data file      ${store.file}`);
+  console.log(
+    storage.driver === 'supabase'
+      ? `  storage        Supabase (PostgreSQL + Auth), ${storage.prompts} questions loaded`
+      : `  storage        memory driver, data file ${storage.file}`,
+  );
 });
 
-/**
- * Stop cleanly so that an in-flight request finishes and the data file is not
- * left half-written.
- */
+/** Stop cleanly so that an in-flight request finishes first. */
 function shutdown(signal) {
   console.log(`\n${signal} received — shutting down.`);
-  server.close(() => {
-    store.save();
+  server.close(async () => {
+    if (config.storage.driver === 'supabase') {
+      const { close } = await import('./data/db.js');
+      await close();
+    } else {
+      const { default: store } = await import('./data/store.js');
+      store.save();
+    }
     process.exit(0);
   });
   // Do not hang for ever on a stuck connection.

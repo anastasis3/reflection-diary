@@ -2,64 +2,81 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <!--
-    viewport-fit=cover plus the safe-area insets in base.css keep the bottom
-    navigation clear of the home indicator on a phone.
-  -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="colour-scheme" content="dark">
-  <meta name="theme-color" content="#0C0B14">
-  <meta name="description" content="A reflection diary that asks one question a day, chosen from what you write about.">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#07030E">
+  <meta name="description" content="A reflection diary that offers three questions a day, chosen from what you write about.">
   <title>Reflection diary</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%23A855F7'/></svg>">
 
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%239B8CFF'/></svg>">
-  <link rel="stylesheet" href="css/tokens.css">
+  <!--
+    Styles, in order: base.css is the layout and the components of the
+    mockup; theme.css lays the violet glass look and the eye intro over it.
+    JetBrains Mono is used only by the eye's HUD; the body font is unchanged.
+  -->
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/screens.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="css/theme.css">
+
+  <!-- Three.js for the eye intro (S-02), loaded only by js/eye.js. Pinned. -->
+  <script type="importmap">
+  { "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  } }
+  </script>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to content</a>
+<!-- the violet smoke behind the app screens, painted once into a canvas -->
+<div id="haze" aria-hidden="true"></div>
 
-  <div class="app-shell">
-    <header class="topbar">
-      <a class="brand" href="#/today" aria-label="Reflection diary, go to today">
-        <span class="brand-dot" aria-hidden="true"></span>
-        reflection diary
-      </a>
-      <nav class="topnav" id="topnav" aria-label="Main" hidden>
-        <a href="#/today" data-screen="today">Today</a>
-        <a href="#/profile" data-screen="profile">Profile</a>
-        <a href="#/history" data-screen="history">History</a>
-        <a href="#/settings" data-screen="settings">Settings</a>
+<div class="wrap">
+  <div class="app">
+    <div class="topbar">
+      <span class="brand" id="brand">reflection diary</span>
+      <nav id="nav" aria-label="Main" hidden>
+        <button data-go="today">Today</button>
+        <button data-go="profile">Profile</button>
+        <button data-go="history">History</button>
+        <button data-go="settings">Settings</button>
       </nav>
-    </header>
-
-    <main id="main" tabindex="-1" aria-live="polite" aria-busy="true">
-      <p class="loading">Loading…</p>
-    </main>
-
-    <!--
-      On a phone the same four destinations sit at the bottom, within thumb
-      reach; the stylesheet shows one or the other, never both.
-    -->
-    <nav class="bottomnav" id="bottomnav" aria-label="Main" hidden>
-      <a href="#/today" data-screen="today"><span class="ico" data-icon="today"></span>Today</a>
-      <a href="#/profile" data-screen="profile"><span class="ico" data-icon="profile"></span>Profile</a>
-      <a href="#/history" data-screen="history"><span class="ico" data-icon="history"></span>History</a>
-      <a href="#/settings" data-screen="settings"><span class="ico" data-icon="settings"></span>Settings</a>
-    </nav>
+    </div>
+    <main id="main" aria-live="polite" tabindex="-1"><p class="sub">Loading…</p></main>
   </div>
+</div>
 
-  <div class="toast-area" id="toasts" aria-live="polite" aria-atomic="false"></div>
-  <dialog id="dialog" class="dialog"><div id="dialog-body"></div></dialog>
+<dialog id="dlg"><div id="dlgBody"></div></dialog>
 
-  <script type="module" src="js/app.js"></script>
-  <noscript>
-    <p style="padding:24px;color:#F0EFFB">
-      This diary needs JavaScript to run. The API it talks to is documented at
-      <a href="/docs/" style="color:#9B8CFF">/docs/</a>.
-    </p>
-  </noscript>
+<!-- S-02 · onboarding intro: the eye. Opened by render() while the quiz is the current screen. -->
+<div id="eyeIntro" hidden role="region" aria-label="Onboarding: nine statements that set your starting profile">
+  <canvas id="eyeCanvas" aria-hidden="true"></canvas>
+  <div class="ei-hud">
+    <div class="ei-top">
+      <span class="ei-brand"><i></i>reflection diary</span>
+      <span class="ei-stage" id="eiStage" aria-live="off">Calibration standby</span>
+      <button class="ei-classic" id="eiClassic" type="button">Classic quiz</button>
+    </div>
+
+    <div class="ei-intro" id="eiIntro">
+      <h2 class="ei-title">The eyes</h2>
+      <p class="ei-line">They reveal what words conceal</p>
+    </div>
+    <p class="ei-closer" id="eiCloser">look closer</p>
+
+    <button class="ei-scroll" id="eiScroll" type="button" aria-label="Begin: nine statements that set your starting profile">
+      <span class="ei-wheel" aria-hidden="true"></span>Scroll to begin · 9 statements
+    </button>
+    <div class="ei-rail" aria-hidden="true"><b>DEPTH</b><i id="eiRail"></i></div>
+
+    <section class="ei-quiz" id="eiQuiz" hidden aria-live="polite"></section>
+    <section class="ei-done" id="eiDone" hidden></section>
+  </div>
+</div>
+
+<!-- app.js first: it defines window.EYE_API, which eye.js reads. -->
+<script type="module" src="js/app.js"></script>
+<script type="module" src="js/eye.js"></script>
+<noscript><p style="padding:24px;color:#F0EFFB">This diary needs JavaScript. The API is documented at <a href="/docs/" style="color:#C084FC">/docs/</a>.</p></noscript>
 </body>
 </html>

@@ -22,7 +22,7 @@
  * moving its weight behind their back would make the Profile screen lie.
  */
 import config from '../config/index.js';
-import * as weightsRepo from '../repositories/weights.repo.js';
+import { weightsRepo } from '../repositories/index.js';
 
 /** The update rule itself, as a pure function. */
 export function nextWeight(oldWeight, score, alpha = config.adaptation.alpha) {
@@ -35,10 +35,10 @@ export function nextWeight(oldWeight, score, alpha = config.adaptation.alpha) {
  *
  * @returns {Array<{zoneId: string, from: number, to: number}>} what moved
  */
-export function applyEntryScores(userId, scores, { alpha = config.adaptation.alpha } = {}) {
+export async function applyEntryScores(userId, scores, { alpha = config.adaptation.alpha } = {}) {
   const changes = [];
 
-  for (const row of weightsRepo.listForUser(userId)) {
+  for (const row of await weightsRepo.listForUser(userId)) {
     if (row.isMuted) continue;
 
     const score = scores[row.zoneId];
@@ -59,7 +59,7 @@ export function applyEntryScores(userId, scores, { alpha = config.adaptation.alp
     const to = nextWeight(from, score, alpha);
     if (to === from) continue;
 
-    weightsRepo.set(userId, row.zoneId, { weight: to, source: 'entry' });
+    await weightsRepo.set(userId, row.zoneId, { weight: to, source: 'learned' });
     changes.push({ zoneId: row.zoneId, from, to });
   }
 
@@ -75,8 +75,8 @@ export function applyEntryScores(userId, scores, { alpha = config.adaptation.alp
  * lives here rather than in the controller because it is a rule of the model,
  * not of the HTTP layer.
  */
-export function applyManualEdit(userId, edits) {
-  const current = weightsRepo.listForUser(userId);
+export async function applyManualEdit(userId, edits) {
+  const current = await weightsRepo.listForUser(userId);
   const after = new Map(current.map((w) => [w.zoneId, { ...w }]));
 
   for (const edit of edits) {
@@ -102,7 +102,7 @@ export function applyManualEdit(userId, edits) {
     const row = after.get(edit.zoneId);
     if (before.weight === row.weight && before.isMuted === row.isMuted) continue;
 
-    weightsRepo.set(userId, edit.zoneId, {
+    await weightsRepo.set(userId, edit.zoneId, {
       weight: row.weight,
       isMuted: row.isMuted,
       source: 'manual',
@@ -113,4 +113,26 @@ export function applyManualEdit(userId, edits) {
   return { ok: true, changes };
 }
 
-export default { nextWeight, applyEntryScores, applyManualEdit };
+/**
+ * Picking a question is a small signal of its own (source = choice).
+ *
+ * When the participant picks one of the three questions, its zone moves up
+ * by CHOICE_BOOST (0.03) once, before anything is written. A concern that is
+ * new — a broken leg, say — then reaches the top three a day or two sooner
+ * than it would from entries alone. The step is small on purpose: three
+ * picks in a row move a weight by less than one entry about it does.
+ *
+ * Muted zones are left alone, as everywhere else in the model.
+ *
+ * @returns {{zoneId: string, from: number, to: number} | null}
+ */
+export async function applyChoiceBoost(userId, zoneId, boost = config.adaptation.choiceBoost) {
+  const row = await weightsRepo.find(userId, zoneId);
+  if (!row || row.isMuted || boost <= 0) return null;
+  const to = Math.round(Math.min(1, row.weight + boost) * 1000) / 1000;
+  if (to === row.weight) return null;
+  await weightsRepo.set(userId, zoneId, { weight: to, source: 'choice' });
+  return { zoneId, from: row.weight, to };
+}
+
+export default { nextWeight, applyEntryScores, applyManualEdit, applyChoiceBoost };

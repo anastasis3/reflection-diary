@@ -1,19 +1,18 @@
 /**
- * Unit tests for the question-selection rule.
+ * Unit tests for the three-question selection rule.
  *
- * The rule is probabilistic, so these tests do not run it a thousand times and
- * check a proportion — that would be slow and occasionally fail for no reason.
- * Instead each test hands `chooseZone` a scripted sequence of "random" numbers
- * and asserts which branch it must take. That is possible only because the
- * function takes its randomness as an argument, which is the reason it does.
+ * The rule is probabilistic, so each test hands `chooseThree` a scripted
+ * sequence of "random" numbers and checks what it must produce, plus one
+ * test that runs it many times and checks the invariants that must hold on
+ * every single draw. Taking randomness as an argument is what makes this
+ * possible.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { chooseZone, choosePrompt } from '../../src/services/selection.service.js';
+import { chooseThree, choosePrompt } from '../../src/services/selection.service.js';
 import { promptsForZone } from '../../src/data/prompts.js';
 
-/** A fake Math.random that returns the given values in order. */
 function scripted(values) {
   let i = 0;
   return () => {
@@ -28,96 +27,68 @@ const weights = [
   { zoneId: 'energy', weight: 0.7, isMuted: false },
   { zoneId: 'emotion', weight: 0.6, isMuted: false },
   { zoneId: 'people', weight: 0.4, isMuted: false },
+  { zoneId: 'self', weight: 0.3, isMuted: false },
   { zoneId: 'meaning', weight: 0.1, isMuted: false },
+  { zoneId: 'health', weight: 0.5, isMuted: true },
 ];
+const settings = { explorationRate: 0.15, topN: 3 };
+const byReason = (three, r) => three.filter((q) => q.reason === r).map((q) => q.zoneId);
 
-const settings = { randomQuestionShare: 0.33, explorationRate: 0.15, topN: 3 };
-
-test('draws a random question when the first coin falls below the share', () => {
-  // first value 0.1 < 0.33 -> the control branch; second value picks from the pool
-  const result = chooseZone({ weights, random: scripted([0.1, 0]), settings });
-  assert.equal(result.reason, 'baseline_random');
+test('slot A is weighted towards the highest zone', () => {
+  // weights of the top three: 0.9 + 0.7 + 0.6 = 2.2; 0.1 * 2.2 = 0.22 < 0.9 → work
+  const three = chooseThree({ weights, random: scripted([0.1, 0.9, 0.5, 0, 0, 0, 0]), settings });
+  assert.ok(byReason(three, 'top_three').includes('work'));
 });
 
-test('a random question may come from any zone, not only the quiet ones', () => {
-  // the second value indexes the pool; 0.99 reaches the last entry
-  const result = chooseZone({ weights, random: scripted([0.1, 0.99]), settings });
-  assert.equal(result.reason, 'baseline_random');
-  assert.equal(result.zoneId, 'meaning');
+test('slot B explores a quiet zone when the coin falls below the rate', () => {
+  // A: work; coin 0.05 < 0.15 → explore; 0 → the first of the three quietest
+  const three = chooseThree({ weights, random: scripted([0, 0.05, 0, 0, 0, 0, 0]), settings });
+  assert.deepEqual(byReason(three, 'exploration'), ['people']);
+  assert.equal(byReason(three, 'top_three').length, 1);
 });
 
-test('explores the quietest zone when the second coin falls below the rate', () => {
-  // 0.9 > 0.33 (not random), then 0.05 < 0.15 (explore)
-  const result = chooseZone({ weights, random: scripted([0.9, 0.05]), settings });
-  assert.equal(result.reason, 'exploration');
-  assert.equal(result.zoneId, 'meaning', 'exploration picks the lowest weight');
+test('otherwise slot B is another of the top three', () => {
+  const three = chooseThree({ weights, random: scripted([0, 0.9, 0, 0, 0, 0, 0]), settings });
+  const adaptive = byReason(three, 'top_three');
+  assert.equal(adaptive.length, 2);
+  for (const z of adaptive) assert.ok(['work', 'energy', 'emotion'].includes(z));
 });
 
-test('otherwise chooses from the three highest weights', () => {
-  // 0.9 > 0.33, 0.9 > 0.15, then 0 picks the first of the top three
-  const result = chooseZone({ weights, random: scripted([0.9, 0.9, 0]), settings });
-  assert.equal(result.reason, 'top_three');
-  assert.equal(result.zoneId, 'work');
+test('slot C, the control, may be any other live zone', () => {
+  // 0.99 indexes the end of the remaining list → the quietest zone
+  const three = chooseThree({ weights, random: scripted([0, 0.9, 0, 0.99, 0, 0, 0]), settings });
+  assert.deepEqual(byReason(three, 'baseline_random'), ['meaning']);
 });
 
-test('the adaptive branch never reaches below the top three', () => {
-  // 0.99 as the index would reach the last zone if the slice were missing
-  const result = chooseZone({ weights, random: scripted([0.9, 0.9, 0.99]), settings });
-  assert.equal(result.reason, 'top_three');
-  assert.ok(
-    ['work', 'energy', 'emotion'].includes(result.zoneId),
-    `expected one of the top three, got ${result.zoneId}`,
-  );
-});
-
-test('a muted zone is never chosen, even when it has the highest weight', () => {
-  const muted = [
-    { zoneId: 'work', weight: 0.95, isMuted: true },
-    { zoneId: 'energy', weight: 0.7, isMuted: false },
-    { zoneId: 'people', weight: 0.4, isMuted: false },
-    { zoneId: 'meaning', weight: 0.2, isMuted: false },
-  ];
-  // run every branch and check the muted zone never appears
-  for (const script of [[0.1, 0.99], [0.9, 0.05], [0.9, 0.9, 0.99], [0.1, 0], [0.9, 0.9, 0]]) {
-    const result = chooseZone({ weights: muted, random: scripted(script), settings });
-    assert.notEqual(result.zoneId, 'work', `muted zone chosen via ${result.reason}`);
+test('on every draw: three different zones, one control, no muted zone, slots 1-3', () => {
+  for (let i = 0; i < 2000; i += 1) {
+    const three = chooseThree({ weights, settings });
+    assert.equal(three.length, 3);
+    assert.equal(new Set(three.map((q) => q.zoneId)).size, 3);
+    assert.equal(byReason(three, 'baseline_random').length, 1);
+    assert.ok(!three.some((q) => q.zoneId === 'health'), 'a muted zone is never offered');
+    assert.deepEqual(three.map((q) => q.slot), [1, 2, 3]);
   }
 });
 
-test("yesterday's zone is excluded, so the same topic is not asked twice running", () => {
-  const result = chooseZone({
-    weights,
-    excludeZone: 'work',
-    random: scripted([0.9, 0.9, 0]),
-    settings,
-  });
-  assert.notEqual(result.zoneId, 'work');
-  assert.equal(result.reason, 'top_three');
-});
-
-test('the exclusion is dropped rather than leaving nothing to ask about', () => {
-  const only = [
-    { zoneId: 'work', weight: 0.8, isMuted: false },
-    { zoneId: 'energy', weight: 0.5, isMuted: true },
-  ];
-  const result = chooseZone({ weights: only, excludeZone: 'work', random: scripted([0.9, 0.9, 0]), settings });
-  assert.equal(result.zoneId, 'work', 'falls back rather than failing to ask');
-});
-
-test('refuses when every zone is muted, with a message that says what to do', () => {
-  const allMuted = weights.map((w) => ({ ...w, isMuted: true }));
-  assert.throws(
-    () => chooseZone({ weights: allMuted, random: scripted([0.9]), settings }),
-    (error) => error.code === 'NO_ACTIVE_ZONES' && error.status === 409,
-  );
-});
-
-test('the chosen question always belongs to the chosen zone', () => {
-  for (const zoneId of ['work', 'people', 'meaning']) {
-    for (const r of [0, 0.5, 0.99]) {
-      const prompt = choosePrompt(zoneId, () => r);
-      assert.equal(prompt.zoneId, zoneId);
-      assert.ok(promptsForZone(zoneId).some((p) => p.id === prompt.id));
-    }
+test('the control lands in each slot about equally often', () => {
+  // If the random question always sat in the same place, a participant could
+  // learn to spot it. Over 3000 draws each slot should get roughly a third.
+  const counts = [0, 0, 0];
+  for (let i = 0; i < 3000; i += 1) {
+    const three = chooseThree({ weights, settings });
+    counts[three.find((q) => q.reason === 'baseline_random').slot - 1] += 1;
   }
+  for (const c of counts) assert.ok(c > 850 && c < 1150, `slot share ${c}/3000`);
+});
+
+test('fewer than three live zones is refused', () => {
+  const two = weights.map((w, i) => ({ ...w, isMuted: i > 1 }));
+  assert.throws(() => chooseThree({ weights: two, settings }), /Fewer than three/);
+});
+
+test('a question is drawn from the chosen zone', () => {
+  const prompt = choosePrompt('people', () => 0.99);
+  assert.equal(prompt.zoneId, 'people');
+  assert.ok(promptsForZone('people').some((p) => p.id === prompt.id));
 });

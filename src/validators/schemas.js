@@ -12,9 +12,13 @@ import { ZONE_IDS } from '../data/zones.js';
 const zoneId = z.enum(ZONE_IDS);
 const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD.');
 
+// Optional everywhere: an empty string means "no name".
+const displayName = z.string().trim().max(40, 'Keep the name under 40 characters.');
+
 export const registerSchema = z.object({
   email: z.email('Enter a valid e-mail address.'),
   password: z.string().min(8, 'Use at least 8 characters.').max(200),
+  name: displayName.optional(),
   acceptPrivacyNotice: z.boolean(),
   acceptAiProcessing: z.boolean(),
 });
@@ -60,6 +64,10 @@ export const updateWeightsSchema = z.object({
     .min(1, 'Send at least one zone to change.'),
 });
 
+export const nameSchema = z.object({
+  name: displayName.nullable(),
+});
+
 export const ratingSchema = z.object({
   relevant: z.boolean(),
 });
@@ -67,6 +75,10 @@ export const ratingSchema = z.object({
 export const trendQuerySchema = z.object({
   zone: zoneId,
   days: z.coerce.number().int().min(2).max(365).default(30),
+});
+
+export const snapshotQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(60).default(7),
 });
 
 export const monthQuerySchema = z.object({
@@ -85,6 +97,8 @@ export default {
   entryFiltersSchema,
   updateWeightsSchema,
   ratingSchema,
+  nameSchema,
+  snapshotQuerySchema,
   trendQuerySchema,
   monthQuerySchema,
   dayParamSchema,

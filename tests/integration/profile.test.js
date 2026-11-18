@@ -176,3 +176,37 @@ test('an unknown zone in the trend query is rejected', async () => {
   const response = await session.auth(request(app).get('/api/profile/trend?zone=astrology'));
   assert.equal(response.status, 422);
 });
+
+test('the insight names the highest zone and how often it came up', async () => {
+  const session = await registerAndOnboard(app, { work: 5, people: 4 });
+  await session.auth(request(app).post('/api/entries').send({
+    text: 'The office deadline moved again and the meeting ran long at work.',
+  }));
+
+  const { status, body } = await session.auth(request(app).get('/api/profile/insight'));
+  assert.equal(status, 200);
+  const { insight } = body;
+  assert.equal(insight.top.zone.id, 'work');
+  assert.equal(insight.totalEntries, 1);
+  assert.equal(insight.top.mentions, 1);
+  assert.equal(insight.top.percentOfEntries, 100);
+  assert.ok(insight.next.zone.id);
+  assert.equal(insight.askedAbout.length, 3);
+});
+
+test('with no entries yet, the insight reports none and names no quiet zone', async () => {
+  const session = await registerAndOnboard(app);
+  const { body } = await session.auth(request(app).get('/api/profile/insight'));
+  assert.equal(body.insight.totalEntries, 0);
+  assert.equal(body.insight.quiet, null, 'silence before the first entry is not a quiet zone');
+});
+
+test('the profile history gives one snapshot per day, today last', async () => {
+  const session = await registerAndOnboard(app);
+  const { status, body } = await session.auth(request(app).get('/api/profile/history?days=7'));
+  assert.equal(status, 200);
+  assert.equal(body.days.length, 7);
+  assert.equal(body.days.at(-1).day, new Date().toISOString().slice(0, 10));
+  assert.equal(Object.keys(body.days.at(-1).weights).length, 9);
+  assert.equal(typeof body.days.at(-1).weights.work, 'number', 'today has the quiz values');
+});

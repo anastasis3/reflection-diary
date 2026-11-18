@@ -108,14 +108,17 @@ jobs:
           curl -sf -X POST http://localhost:3000/api/onboarding/complete \
             -H "authorization: Bearer $TOKEN" > /dev/null
 
-          echo "--- the question of the day ---"
-          curl -sf http://localhost:3000/api/prompts/today -H "authorization: Bearer $TOKEN"
+          echo "--- today's three questions ---"
+          QID=$(curl -sf http://localhost:3000/api/prompts/today -H "authorization: Bearer $TOKEN" \
+            | node -pe 'const r=JSON.parse(require("fs").readFileSync(0)); if(r.questions.length!==3) process.exit(1); r.questions[0].promptShownId')
+          echo "picked $QID"
+          curl -sf -X POST http://localhost:3000/api/prompts/$QID/choose -H "authorization: Bearer $TOKEN"
 
           echo ""
-          echo "--- save an entry ---"
+          echo "--- answer it ---"
           curl -sf -X POST http://localhost:3000/api/entries \
             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-            -d '{"text":"Three meetings at the office that could have been one message."}' \
+            -d "{\"text\":\"Three meetings at the office that could have been one message.\",\"promptShownId\":\"$QID\"}" \
             | node -pe 'const r=JSON.parse(require("fs").readFileSync(0)); if(r.analysis!=="classified") { console.error(r); process.exit(1) } "analysis: "+r.analysis+", moved "+r.weightChanges.length+" zones"'
 
           echo "--- delete the account again ---"
@@ -124,6 +127,55 @@ jobs:
           NODE_ENV: production
           JWT_SECRET: a-secret-used-only-by-this-ci-run
           PORT: 3000
+
+  postgres:
+    name: Supabase driver on PostgreSQL 16
+    runs-on: ubuntu-latest
+    needs: test
+
+    # The same migrations that go to Supabase, applied to a plain PostgreSQL,
+    # then the API run against them. Supabase Auth has no local equivalent, so
+    # supabase/local/00_auth_stub.sql provides auth.users and auth.uid(), and
+    # the test replaces the Auth calls with a stub (see the test file).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rd_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+
+    env:
+      PGPASSWORD: postgres
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/rd_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Apply the auth stub, the migrations and the test data
+        run: |
+          for f in supabase/local/00_auth_stub.sql supabase/migrations/*.sql supabase/seed/test_data.sql; do
+            echo "== $f"
+            psql -h localhost -U postgres -d rd_test -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+
+      - name: Schema checks (RLS, constraints, triggers, three questions a day)
+        run: |
+          psql -h localhost -U postgres -d rd_test -f supabase/seed/checks.sql | tee checks.log
+          ! grep -q FAIL checks.log
+
+      - name: The API on the Supabase driver
+        run: node --test tests/postgres/postgres.test.js
 
   docs:
     name: The OpenAPI description is valid

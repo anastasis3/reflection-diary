@@ -136,3 +136,30 @@ test('malformed JSON is reported as such, not as a crash', async () => {
   assert.equal(response.status, 400);
   assert.equal(response.body.error.code, 'MALFORMED_JSON');
 });
+
+test('a name given at sign-up is returned and used for the greeting', async () => {
+  const session = await registerUser(app, { name: '  Mia ' });
+  assert.equal(session.user.displayName, 'Mia', 'trimmed');
+
+  const me = await session.auth(request(app).get('/api/auth/me'));
+  assert.equal(me.body.user.displayName, 'Mia');
+});
+
+test('the name is optional: none given means no name, not an empty string', async () => {
+  const session = await registerUser(app, { name: '   ' });
+  assert.equal(session.user.displayName, null);
+  const other = await registerUser(app);
+  assert.equal(other.user.displayName, null);
+});
+
+test('the name can be changed or cleared in Settings, and is limited to 40 characters', async () => {
+  const session = await registerUser(app);
+  const set = await session.auth(request(app).patch('/api/account/name').send({ name: 'Ona' }));
+  assert.equal(set.body.user.displayName, 'Ona');
+
+  const cleared = await session.auth(request(app).patch('/api/account/name').send({ name: null }));
+  assert.equal(cleared.body.user.displayName, null);
+
+  const long = await session.auth(request(app).patch('/api/account/name').send({ name: 'x'.repeat(41) }));
+  assert.equal(long.status, 422);
+});

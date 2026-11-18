@@ -2,17 +2,21 @@
  * Reads the bearer token and puts the account on the request.
  *
  * Every route that touches personal data is behind this. The controllers
- * below it never read an account id out of the request body or the URL —
- * they use `req.user.id`, which came from a signed token. That is the single
- * rule that makes it impossible for one participant to ask for another's
- * entries by guessing an id, and it is the application-side counterpart of
- * the row level security policies in the database.
+ * never read an account id from the body or the URL — they use `req.user.id`,
+ * which came from a signed token. That single rule is what stops one
+ * participant asking for another's entries by guessing an id; it is the
+ * application-side twin of the row level security policies in the database.
+ *
+ * The account is checked against the profiles table, not against the auth
+ * provider: a profile exists exactly as long as the account does (it is
+ * deleted with it), and a local query is much cheaper than a call to
+ * Supabase Auth on every request.
  */
 import ApiError from '../utils/ApiError.js';
 import { verifyToken } from '../services/auth.service.js';
-import * as usersRepo from '../repositories/users.repo.js';
+import { profilesRepo } from '../repositories/index.js';
 
-export function authenticate(req, _res, next) {
+export async function authenticate(req, _res, next) {
   const header = req.get('authorization') ?? '';
   const [scheme, token] = header.split(' ');
 
@@ -22,10 +26,10 @@ export function authenticate(req, _res, next) {
 
   try {
     const payload = verifyToken(token);
-    const user = usersRepo.findById(payload.sub);
-    if (!user) return next(ApiError.unauthorized('This account no longer exists.'));
+    const profile = await profilesRepo.findById(payload.sub);
+    if (!profile) return next(ApiError.unauthorized('This account no longer exists.'));
 
-    req.user = { id: user.id, email: user.email };
+    req.user = { id: payload.sub, email: payload.email };
     return next();
   } catch (error) {
     return next(error);

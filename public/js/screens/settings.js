@@ -1,166 +1,97 @@
 /**
- * S-07 — Settings and privacy.
+ * S-07 · Settings & privacy.
  *
- * Three promises made on the registration screen, each with a button that
- * keeps it: what is stored, withdrawing the analysis consent, and deleting
- * everything. Deletion asks for confirmation and then actually deletes —
- * there is no "deactivated" state hiding the data.
+ *   name          "What should the diary call you?" — PATCH /account/name
+ *   AI consent    withdraw (entries stay, the profile stops moving) or give
+ *                 it again — DELETE / POST /account/consents/ai-processing
+ *   your data     downloads everything as one JSON file — GET /account/export
+ *   log out       forgets the token in this browser
+ *   delete        removes the account and every row — DELETE /account
  */
 import { api, token } from '../api.js';
-import { signOut, state } from '../state.js';
-import { esc } from '../dom.js';
-import icons from '../icons.js';
-import { navigate } from '../router.js';
-import { toast, confirmDialog } from '../components/toast.js';
+import { S, esc, $, go, render, notice, openDialog, longDate } from '../core.js';
 
-export async function render(root) {
-  root.innerHTML = `<p class="loading">Loading your settings…</p>`;
-  let { consents } = await api.consents();
+const ST = { consents: [] };
+const ai = () => ST.consents.find((c) => c.purpose === 'ai_processing');
 
-  function draw() {
-    const ai = consents.find((c) => c.purpose === 'ai_processing');
+export const settings = {
+  async load() {
+    ST.consents = (await api.consents()).consents;
+  },
 
-    root.innerHTML = `
-      <section>
-        <div class="page-head">
-          <h1>Settings &amp; privacy</h1>
-          <p class="sub">What is stored, what leaves the app, and how to remove it</p>
-        </div>
+  view() {
+    const c = ai();
+    const on = Boolean(c?.active);
+    return `
+  <h1>Settings &amp; privacy</h1><p class="sub">What is stored, who can see it, and how to remove it</p>
+  <div class="card"><b>What is stored</b>
+    <p style="font-size:14px;color:var(--txt2);margin:6px 0 0">Your e-mail, your entries, the topic scores of each entry, your nine weights and which questions you were offered and picked. Entries are encrypted at rest. Only the text of an entry is sent to the AI model — never your e-mail, your identifier or a date of birth.</p></div>
+  <div class="card"><b>What should the diary call you?</b>
+    <div class="row" style="margin-top:10px;flex-wrap:wrap">
+      <input id="nameIn" type="text" maxlength="40" autocomplete="given-name" placeholder="No name — the greeting stays plain" value="${esc(S.user?.displayName ?? '')}" style="flex:1;min-width:200px;margin:0" aria-label="Your name">
+      <button class="btn ghost" id="saveName">Save</button></div>
+    <p class="hint" id="nameHint" style="margin:8px 0 0">Only used to greet you on Today.</p></div>
+  <div class="card"><div class="spread"><div style="max-width:420px"><b>AI processing of your entries</b>
+    <p style="font-size:14px;color:var(--txt2);margin:6px 0 0">${on
+      ? `Consent given on ${longDate(c.grantedAt.slice(0, 10))}. Withdrawing it stops the analysis: you keep writing and your entries stay, but new entries are no longer sent to the model and your profile stops changing.`
+      : `Withdrawn${c?.withdrawnAt ? ` on ${longDate(c.withdrawnAt.slice(0, 10))}` : ''}. Your entries are saved but not analysed, and your profile does not change. You can give the consent again at any time.`}</p></div>
+    <button class="btn ghost" id="${on ? 'withdraw' : 'grant'}">${on ? 'Withdraw consent' : 'Give consent again'}</button></div></div>
+  <div class="card"><div class="spread"><div style="max-width:420px"><b>Your copy of the data</b>
+    <p style="font-size:14px;color:var(--txt2);margin:6px 0 0">A JSON file with every entry, every topic score, every question you were offered and the history of your weights.</p></div>
+    <button class="btn ghost" id="download">Download my data</button></div></div>
+  <div class="card"><div class="spread"><div style="max-width:420px"><b>Log out</b>
+    <p style="font-size:14px;color:var(--txt2);margin:6px 0 0">Signed in as ${esc(S.user?.email ?? '')}.</p></div>
+    <button class="btn ghost" id="logout">Log out</button></div></div>
+  <div class="card danger"><b style="color:var(--err)">Delete account and all data</b>
+    <p style="font-size:14px;color:var(--txt2);margin:6px 0 14px">This removes your account, every entry, every topic score, your profile and the measurements collected during the pilot. It cannot be undone and takes a few seconds.</p>
+    <button class="btn danger" id="del">Delete everything</button></div>`;
+  },
 
-        <div class="card">
-          <b>Signed in as</b>
-          <p style="font-size:14px;color:var(--text-2);margin-top:var(--gap-1)">${esc(state.user?.email ?? '')}</p>
-          <p style="margin-top:var(--gap-3)"><button class="btn ghost small" data-logout>Log out</button></p>
-        </div>
-
-        <div class="card">
-          <b>What is stored</b>
-          <p style="font-size:14px;color:var(--text-2);margin-top:var(--gap-1)">
-            Your e-mail address, your entries, the topic scores of each entry and your nine weights.
-            Only the text of an entry is sent for analysis — never your e-mail address or your identifier.
-            Nothing is sent while you are typing: the text leaves this device when you press Save.
-          </p>
-        </div>
-
-        <div class="card">
-          <div class="setting">
-            <div>
-              <b>Analysis of your entries</b>
-              <p>
-                ${ai?.active
-                  ? `Consent given on ${esc((ai.grantedAt ?? '').slice(0, 10))}. Withdrawing it stops the analysis:
-                     you keep writing and your entries stay, but new entries are no longer analysed
-                     and your profile stops changing.`
-                  : `Withdrawn on ${esc((ai?.withdrawnAt ?? '').slice(0, 10))}. Your entries are still saved,
-                     and your profile is frozen at the values it had.`}
-              </p>
-            </div>
-            ${ai?.active
-              ? '<button class="btn ghost" data-withdraw>Withdraw consent</button>'
-              : '<button class="btn ghost" data-grant>Give consent again</button>'}
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="setting">
-            <div>
-              <b>Your copy of the data</b>
-              <p>A JSON file with every entry, every topic score and the history of your weights.</p>
-            </div>
-            <button class="btn ghost" data-export>Download my data</button>
-          </div>
-        </div>
-
-        <div class="card danger">
-          <b style="color:var(--error)">Delete account and all data</b>
-          <p style="font-size:14px;color:var(--text-2);margin:var(--gap-1) 0 var(--gap-3)">
-            This removes your account, every entry, every topic score, your profile and
-            everything recorded during the pilot. It cannot be undone.
-          </p>
-          <button class="btn danger" data-delete>${icons.trash('#FF9B8A')} Delete everything</button>
-        </div>
-      </section>`;
-
-    wire();
-  }
-
-  function wire() {
-    root.querySelector('[data-logout]')?.addEventListener('click', () => {
-      signOut();
-      navigate('#/login');
+  wire() {
+    $('#saveName').addEventListener('click', async () => {
+      try {
+        S.user = (await api.setName($('#nameIn').value.trim() || null)).user;
+        $('#nameHint').textContent = S.user.displayName ? `Saved. Today will greet you as ${S.user.displayName}.` : 'Saved. The greeting has no name now.';
+      } catch (error) { $('#nameHint').textContent = error.fields.name ?? error.message; }
     });
 
-    root.querySelector('[data-withdraw]')?.addEventListener('click', async () => {
-      const yes = await confirmDialog({
-        title: 'Withdraw the analysis consent?',
-        body: 'Your entries stay and you can keep writing. New entries will not be analysed, so your profile will stop changing and the questions will stop adapting.',
-        confirmLabel: 'Withdraw',
+    $('#withdraw')?.addEventListener('click', () => {
+      const d = openDialog(`<h2 style="margin:0 0 10px;font-size:18px">Withdraw AI consent?</h2>
+        <p style="color:var(--txt2);font-size:15px;margin:0">Your entries stay and you can keep writing. New entries will no longer be sent to the model, and your profile will stop changing. You can give the consent again at any time.</p>
+        <div class="dlgrow"><button class="btn" data-close autofocus>Keep it on</button><button class="btn ghost" id="confirmWithdraw">Withdraw</button></div>`);
+      $('#confirmWithdraw').addEventListener('click', async () => {
+        d.close();
+        try { ST.consents = (await api.withdrawAiConsent()).consents; S.user.aiProcessingConsent = false; render(); } catch (e) { notice(e.message); }
       });
-      if (!yes) return;
-      ({ consents } = await api.withdrawAiConsent());
-      draw();
-      toast('Analysis stopped. Your entries are untouched.', 'good');
+    });
+    $('#grant')?.addEventListener('click', async () => {
+      try { ST.consents = (await api.grantAiConsent()).consents; S.user.aiProcessingConsent = true; render(); } catch (e) { notice(e.message); }
     });
 
-    root.querySelector('[data-grant]')?.addEventListener('click', async () => {
-      ({ consents } = await api.grantAiConsent());
-      draw();
-      toast('Analysis is on again — your next entry will move your profile.', 'good');
-    });
-
-    root.querySelector('[data-export]')?.addEventListener('click', async () => {
+    $('#download').addEventListener('click', async () => {
       try {
         const data = await api.exportData();
-        // Built and downloaded in the browser: the file never passes through
-        // anywhere else on its way to the person it belongs to.
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `reflection-diary-${data.exportedAt.slice(0, 10)}.json`;
-        link.click();
-        URL.revokeObjectURL(url);
-        toast('Your data has been downloaded.', 'good');
-      } catch (error) {
-        toast(error.message, 'warn');
-      }
+        const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+        const a = Object.assign(document.createElement('a'), { href: url, download: `reflection-diary-${data.exportedAt.slice(0, 10)}.json` });
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (e) { notice(e.message); }
     });
 
-    root.querySelector('[data-delete]')?.addEventListener('click', async () => {
-      const yes = await confirmDialog({
-        title: 'Delete everything?',
-        body: 'Your account, your entries, your topic profile and every measurement collected during the pilot will be removed. This cannot be undone.',
-        confirmLabel: 'Delete everything',
-        danger: true,
+    $('#logout').addEventListener('click', () => { token.clear(); S.user = null; go('login'); });
+
+    $('#del').addEventListener('click', () => {
+      const d = openDialog(`<h2 style="margin:0 0 10px;font-size:18px">Delete everything?</h2>
+        <p style="color:var(--txt2);font-size:15px;margin:0 0 12px">You will be logged out and ${S.entries?.length ?? 'all'} entries, your nine weights, your pilot measurements and your account will be removed.</p>
+        <p style="color:var(--err);font-weight:700;font-size:14px;margin:0;border-top:1px solid var(--div);padding-top:12px">This cannot be undone.</p>
+        <div class="dlgrow"><button class="btn" data-close autofocus>Keep my account</button>
+          <button class="btn danger" id="confirmDel">Yes, delete everything</button></div>`);
+      $('#confirmDel').addEventListener('click', async () => {
+        try {
+          await api.deleteAccount();
+          d.close(); token.clear(); S.user = null; go('gone');
+        } catch (e) { d.close(); notice(e.message); }
       });
-      if (!yes) return;
-
-      try {
-        await api.deleteAccount();
-        token.clear();
-        signOut();
-        root.innerHTML = `
-          <section class="auth-screen">
-            <h1>Everything has been deleted</h1>
-            <p class="sub">Your account, your entries, your profile and your pilot measurements are gone.</p>
-            <div class="card">
-              <p style="margin:0;font-size:14px;color:var(--text-2)">
-                Thank you for taking part. If you would like to start again, you can create a new account.
-              </p>
-              <p style="margin-top:var(--gap-3)">
-                <button class="btn" data-go="#/register">Start again</button>
-              </p>
-            </div>
-          </section>`;
-        document.getElementById('topnav').hidden = true;
-        document.getElementById('bottomnav').hidden = true;
-      } catch (error) {
-        toast(error.message, 'warn');
-      }
     });
-  }
-
-  draw();
-}
-
-export default { render };
+  },
+};

@@ -58,3 +58,22 @@ test('a larger alpha reacts faster, a smaller one slower', () => {
   const slow = nextWeight(0.2, 1, 0.1);
   assert.ok(fast > slow, 'alpha controls how quickly the profile follows evidence');
 });
+
+test('the choice boost is small, applied once per call, and never to a muted zone', async () => {
+  process.env.NODE_ENV = 'test';
+  const { default: store } = await import('../../src/data/store.js');
+  const { weightsRepo } = await import('../../src/repositories/index.js');
+  const { applyChoiceBoost } = await import('../../src/services/adaptation.service.js');
+  const path = await import('node:path');
+  store.useFile(path.resolve('tests/.tmp/adaptation-unit.json'));
+  store.reset();
+
+  await weightsRepo.set('u1', 'health', { weight: 0.44, source: 'quiz' });
+  await weightsRepo.set('u1', 'work', { weight: 0.99, source: 'quiz' });
+  await weightsRepo.set('u1', 'self', { weight: 0.5, isMuted: true, source: 'manual' });
+
+  assert.deepEqual(await applyChoiceBoost('u1', 'health'), { zoneId: 'health', from: 0.44, to: 0.47 });
+  assert.equal((await applyChoiceBoost('u1', 'work')).to, 1, 'clamped at 1');
+  assert.equal(await applyChoiceBoost('u1', 'self'), null, 'muted zones do not move');
+  assert.equal((await weightsRepo.find('u1', 'health')).source, 'choice');
+});

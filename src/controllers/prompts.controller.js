@@ -1,54 +1,26 @@
+/**
+ * The three questions of the day. Thin: validated input in, one service
+ * call, JSON out. The rules live in services/questions.service.js.
+ */
 import asyncHandler from '../utils/asyncHandler.js';
-import ApiError from '../utils/ApiError.js';
-import * as selectionService from '../services/selection.service.js';
-import * as promptsShownRepo from '../repositories/promptsShown.repo.js';
-import { getPrompt } from '../data/prompts.js';
-import { getZone } from '../data/zones.js';
+import * as questions from '../services/questions.service.js';
 
-/** GET /api/prompts/today — the question of the day. */
+/** GET /api/prompts/today — today's three questions (created on first call). */
 export const today = asyncHandler(async (req, res) => {
-  const { shown, isNew } = selectionService.questionOfTheDay(req.user.id);
-  const prompt = getPrompt(shown.promptId);
+  res.json(await questions.today(req.user.id));
+});
 
-  res.json({
-    promptShownId: shown.id,
-    text: prompt?.text ?? null,
-    zone: getZone(shown.zoneId),
-    shownAt: shown.shownAt,
-    wasAnswered: shown.wasAnswered,
-    relevanceRating: shown.relevanceRating,
-    isNew,
-    // The selection reason is NOT sent to the browser. A participant who could
-    // see that today's question was drawn at random would rate it differently,
-    // and the comparison the study rests on would be worthless. It is stored
-    // and read only from the database, for the analysis.
-  });
+/** POST /api/prompts/:id/choose — the participant picked this one to write about. */
+export const choose = asyncHandler(async (req, res) => {
+  res.json(await questions.choose(req.user.id, req.validated.params.id));
 });
 
 /** GET /api/prompts/:id/explanation — the "Why this question?" text. */
 export const explanation = asyncHandler(async (req, res) => {
-  const shown = promptsShownRepo.findById(req.validated.params.id);
-  if (!shown || shown.userId !== req.user.id) {
-    throw ApiError.notFound('That question does not belong to your account.');
-  }
-
-  promptsShownRepo.markExplanationOpened(shown.id);
-  const explained = selectionService.explain(req.user.id, shown);
-
-  res.json({
-    zone: getZone(shown.zoneId),
-    weight: explained.weight,
-    text: explained.text,
-  });
+  res.json(await questions.explanation(req.user.id, req.validated.params.id));
 });
 
-/** POST /api/prompts/:id/rating — "was this question relevant to you?" */
+/** POST /api/prompts/:id/rating — "was this question relevant to you?" (after answering) */
 export const rate = asyncHandler(async (req, res) => {
-  const shown = promptsShownRepo.findById(req.validated.params.id);
-  if (!shown || shown.userId !== req.user.id) {
-    throw ApiError.notFound('That question does not belong to your account.');
-  }
-
-  const updated = promptsShownRepo.rate(shown.id, req.validated.body.relevant);
-  res.json({ promptShownId: updated.id, relevanceRating: updated.relevanceRating, ratedAt: updated.ratedAt });
+  res.json(await questions.rate(req.user.id, req.validated.params.id, req.validated.body.relevant));
 });

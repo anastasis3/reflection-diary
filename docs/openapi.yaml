@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Reflection Diary API
-  version: 1.0.0
+  version: 1.1.0
   summary: The HTTP interface of an adaptive self-reflection diary.
   description: |
     The API behind *Development and Experimental Evaluation of an Adaptive
@@ -12,16 +12,18 @@ info:
 
     A participant answers nine statements once. Those answers become nine
     **weights**, one per topic zone, each between 0.00 and 1.00. Every day the
-    diary chooses a zone, draws a question from it, and — after the entry is
-    saved — moves the weights towards what the entry was about:
+    diary offers **three questions on three different zones**: two chosen from
+    the weights (top three, or now and then a quiet zone) and one drawn at
+    random from the rest as the control. The participant picks the one that
+    fits — picking nudges that zone up once by 0.03 — and may answer more.
+    After an entry is saved the weights move towards what it was about:
 
         new = 0.3 × score + 0.7 × old
 
-    About one question in three is drawn at random from the whole bank instead
-    of from the weights. Both kinds go to every participant, so each person is
-    compared against themselves. Which kind a question was is **never sent to
-    the client**: a participant who could see it would rate it differently and
-    the comparison would be worthless.
+    The main measure is which question is picked first: blind picking would
+    land on an adaptive one two times in three. Which question was the random
+    one is **never sent to the client**: a participant who could see it would
+    choose and rate differently and the comparison would be worthless.
 
     ### Conventions
 
@@ -112,6 +114,10 @@ paths:
               properties:
                 email: { type: string, format: email }
                 password: { type: string, minLength: 8, maxLength: 200 }
+                name:
+                  type: string
+                  maxLength: 40
+                  description: Optional. What the diary greets you by. Empty means no name.
                 acceptPrivacyNotice: { type: boolean }
                 acceptAiProcessing:
                   type: boolean
@@ -236,22 +242,56 @@ paths:
   /prompts/today:
     get:
       tags: [Questions]
-      summary: The question of the day
+      summary: Today's three questions
       description: |
-        One question per calendar day. Calling this again on the same day
-        returns the same question with `isNew: false`, so a reload or a second
-        device cannot hand out a second one and spoil the measurement.
+        Three questions on three different zones, in shuffled slots 1-3. They
+        are created on the first call of the day and stored; every later call
+        that day returns the same three with `isNew: false`, so a reload or a
+        second device cannot re-roll them.
 
-        The response deliberately omits why the question was chosen.
+        The response deliberately omits why each question was offered.
       responses:
         '200':
-          description: Today's question.
-          content: { application/json: { schema: { $ref: '#/components/schemas/TodaysQuestion' } } }
+          description: Today's questions.
+          content: { application/json: { schema: { $ref: '#/components/schemas/TodaysQuestions' } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409':
           description: |
             `ONBOARDING_INCOMPLETE` — the quiz has not been finished, so there
-            are no weights to choose from. `NO_ACTIVE_ZONES` — every zone is muted.
+            are no weights to choose from. `NO_ACTIVE_ZONES` — fewer than three
+            zones are on.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /prompts/{id}/choose:
+    post:
+      tags: [Questions]
+      summary: Pick a question to write about
+      description: |
+        Records that the participant picked this question (the main measure of
+        the study) and, the first time only, moves its zone up by
+        `CHOICE_BOOST` (0.03) with source `choice`. Calling it again changes
+        nothing and returns `boost: null`. Only today's questions can be picked.
+      parameters:
+        - $ref: '#/components/parameters/PromptShownId'
+      responses:
+        '200':
+          description: The question is picked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  question: { $ref: '#/components/schemas/Question' }
+                  boost:
+                    type: [object, 'null']
+                    properties:
+                      zone: { $ref: '#/components/schemas/Zone' }
+                      from: { type: number }
+                      to: { type: number }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`QUESTION_EXPIRED` — the question was for another day.'
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
   /prompts/{id}/explanation:
@@ -287,10 +327,11 @@ paths:
       tags: [Questions]
       summary: Rate how relevant the question was
       description: |
-        The one measurement the diary cannot work out for itself, and the main
-        outcome of the study: the share of liked questions among the adaptive
-        ones against the random ones. Optional for the participant — an absent
-        rating means "not rated", never "disliked".
+        The second measure of the study: the share of liked questions among the
+        adaptive ones against the random ones. Allowed only after the question
+        has been answered — the pick already says which question appealed, and
+        a rating given before writing would be a first impression. Optional:
+        an absent rating means "not rated", never "disliked".
       parameters:
         - $ref: '#/components/parameters/PromptShownId'
       requestBody:
@@ -315,6 +356,9 @@ paths:
                   ratedAt: { type: string, format: date-time }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`NOT_ANSWERED` — answer the question first.'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
   /entries:
     post:
@@ -349,7 +393,9 @@ paths:
                 promptShownId:
                   type: string
                   format: uuid
-                  description: The question this entry answers, from `/prompts/today`.
+                  description: |
+                    One of today's three questions, from `/prompts/today`. If it
+                    was not picked with `/choose` first, saving counts as the pick.
       responses:
         '201':
           description: The entry was saved.
@@ -357,6 +403,11 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404':
           description: The question does not belong to this account.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '409':
+          description: |
+            `ALREADY_ANSWERED` — this question already has an entry.
+            `QUESTION_EXPIRED` — the question was for another day.
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
@@ -428,6 +479,90 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409':
           description: '`ONBOARDING_INCOMPLETE` — there is no profile until the quiz is finished.'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /profile/insight:
+    get:
+      tags: [Profile]
+      summary: The insight above the weights
+      description: |
+        Built from the same numbers as the chart: the highest live zone, how
+        far it moved since the quiz, how often it came up in the last five
+        weeks (an entry "mentions" a zone when its score is at least 0.5),
+        what comes next, and the quietest zone that has not come up in two
+        weeks (null before there is any recent writing).
+      responses:
+        '200':
+          description: The insight, or null when every zone is muted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  insight:
+                    type: [object, 'null']
+                    properties:
+                      windowDays: { type: integer, examples: [35] }
+                      totalEntries: { type: integer }
+                      top:
+                        type: object
+                        properties:
+                          zone: { $ref: '#/components/schemas/Zone' }
+                          weight: { type: number }
+                          deltaSinceQuiz: { type: [number, 'null'] }
+                          mentions: { type: integer }
+                          recentMentions: { type: integer }
+                          percentOfEntries: { type: integer }
+                      next:
+                        type: [object, 'null']
+                        properties:
+                          zone: { $ref: '#/components/schemas/Zone' }
+                          weight: { type: number }
+                      quiet:
+                        type: [object, 'null']
+                        properties:
+                          zone: { $ref: '#/components/schemas/Zone' }
+                          weight: { type: number }
+                          days: { type: integer }
+                      askedAbout:
+                        type: array
+                        items: { $ref: '#/components/schemas/Zone' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: '`ONBOARDING_INCOMPLETE`'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /profile/history:
+    get:
+      tags: [Profile]
+      summary: The profile on each of the last few days
+      description: |
+        For the week strip on Today. Each zone carries its last recorded value
+        forward to days on which it did not change; before the quiz it is null.
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 60, default: 7 }
+      responses:
+        '200':
+          description: One snapshot per day, oldest first, today last.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  days:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day: { type: string, format: date }
+                        weights:
+                          type: object
+                          additionalProperties: { type: [number, 'null'] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: '`ONBOARDING_INCOMPLETE`'
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
   /profile/weights:
@@ -579,8 +714,9 @@ paths:
       tags: [History]
       summary: One day in full
       description: |
-        The question asked that day, how it was rated, and the entries written.
-        A day with nothing on it is a valid answer, not an error.
+        The three questions offered that day, which were answered and how they
+        were rated, and the entries written. A day with nothing on it is a
+        valid answer, not an error.
       parameters:
         - name: day
           in: path
@@ -646,6 +782,32 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Consent' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /account/name:
+    patch:
+      tags: [Account]
+      summary: Change or clear the name
+      description: What the diary greets you by. `null` or an empty string removes it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: [string, 'null'], maxLength: 40 }
+      responses:
+        '200':
+          description: The updated account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
 
   /account/export:
     get:
@@ -743,6 +905,9 @@ components:
       properties:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
+        displayName:
+          type: [string, 'null']
+          description: Null when no name was given; the greeting then has no name.
         createdAt: { type: string, format: date-time }
         onboardingCompleted: { type: boolean }
         aiProcessingConsent: { type: boolean }
@@ -821,18 +986,33 @@ components:
               delta: { type: [number, 'null'], description: How far it has moved since then. }
               askedAbout: { type: boolean }
 
-    TodaysQuestion:
+    Question:
       type: object
+      description: One of the day's three questions. Never says why it was offered.
       properties:
         promptShownId: { type: string, format: uuid }
+        slot: { type: integer, minimum: 1, maximum: 3 }
+        day: { type: string, format: date }
         text: { type: string }
         zone: { $ref: '#/components/schemas/Zone' }
-        shownAt: { type: string, format: date-time }
+        wasChosen: { type: boolean }
         wasAnswered: { type: boolean }
+        entryId: { type: [string, 'null'], format: uuid }
         relevanceRating: { type: [boolean, 'null'] }
+
+    TodaysQuestions:
+      type: object
+      properties:
+        day: { type: string, format: date }
+        questions:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items: { $ref: '#/components/schemas/Question' }
+        answeredCount: { type: integer, minimum: 0, maximum: 3 }
         isNew:
           type: boolean
-          description: False when this question had already been issued today.
+          description: False when today's questions had already been issued.
 
     Entry:
       type: object
@@ -841,9 +1021,9 @@ components:
         text: { type: string }
         status:
           type: string
-          enum: [pending, classified, classification_failed]
+          enum: [saved, classified, classification_failed]
           description: |
-            `pending` — saved, not yet analysed (also the state when consent is
+            `saved` — stored, not yet analysed (also the state when consent is
             withdrawn). `classified` — analysed, nine scores exist.
             `classification_failed` — kept, but the analysis did not succeed.
         createdAt: { type: string, format: date-time }
@@ -862,6 +1042,7 @@ components:
           properties:
             promptShownId: { type: string, format: uuid }
             zoneId: { $ref: '#/components/schemas/ZoneId' }
+            zone: { $ref: '#/components/schemas/Zone' }
             text: { type: string }
             relevanceRating: { type: [boolean, 'null'] }
 
@@ -883,6 +1064,13 @@ components:
               from: { type: number }
               to: { type: number }
               delta: { type: number }
+        boost:
+          type: [object, 'null']
+          description: Set when saving also counted as picking the question (no prior `choose` call).
+          properties:
+            zone: { $ref: '#/components/schemas/Zone' }
+            from: { type: number }
+            to: { type: number }
 
     Calendar:
       type: object
@@ -907,20 +1095,10 @@ components:
       type: object
       properties:
         day: { type: string, format: date }
-        question:
-          type: [object, 'null']
-          properties:
-            promptShownId: { type: string, format: uuid }
-            text: { type: string }
-            zone: { $ref: '#/components/schemas/Zone' }
-            selectionReason:
-              type: string
-              enum: [top_three, exploration, baseline_random]
-              description: |
-                Present only here, on a past day that has already been rated,
-                where it can no longer influence the rating.
-            relevanceRating: { type: [boolean, 'null'] }
-            wasAnswered: { type: boolean }
+        questions:
+          type: array
+          description: The three questions offered that day (empty before the first visit).
+          items: { $ref: '#/components/schemas/Question' }
         entries:
           type: array
           items: { $ref: '#/components/schemas/Entry' }

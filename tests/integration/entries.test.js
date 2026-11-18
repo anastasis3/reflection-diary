@@ -1,71 +1,12 @@
 /**
- * The question of the day, saving an entry, and what that does to the profile
- * (US-3.x and US-4.x). This file covers the main flow of the whole product.
+ * Saving an entry and what that does to the profile (US-4.x). The three
+ * questions themselves are covered in questions.test.js.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { freshApp, registerAndOnboard, registerUser, request } from '../helpers/testApp.js';
 
 const { app } = freshApp('entries');
-
-test('the question of the day names a zone and a text', async () => {
-  const session = await registerAndOnboard(app);
-  const { status, body } = await session.auth(request(app).get('/api/prompts/today'));
-
-  assert.equal(status, 200);
-  assert.ok(body.promptShownId);
-  assert.ok(body.text.length > 10);
-  assert.ok(body.zone.id);
-  assert.equal(body.wasAnswered, false);
-});
-
-test('asking twice on the same day returns the same question', async () => {
-  const session = await registerAndOnboard(app);
-  const first = await session.auth(request(app).get('/api/prompts/today'));
-  const second = await session.auth(request(app).get('/api/prompts/today'));
-
-  assert.equal(first.body.promptShownId, second.body.promptShownId);
-  assert.equal(second.body.isNew, false, 'a reload must not hand out a second question');
-});
-
-test('why a question was chosen is not sent to the browser', async () => {
-  // A participant who could see that today's question was drawn at random
-  // would rate it differently, and the comparison the study rests on would
-  // be worthless. The reason is stored and read only for the analysis.
-  const session = await registerAndOnboard(app);
-  const { body } = await session.auth(request(app).get('/api/prompts/today'));
-
-  assert.equal(body.selectionReason, undefined);
-  assert.ok(!JSON.stringify(body).includes('baseline_random'));
-});
-
-test('the explanation is truthful about a randomly drawn question', async () => {
-  const session = await registerAndOnboard(app);
-  const { body: question } = await session.auth(request(app).get('/api/prompts/today'));
-  const { status, body } = await session.auth(
-    request(app).get(`/api/prompts/${question.promptShownId}/explanation`),
-  );
-
-  assert.equal(status, 200);
-  assert.ok(body.text.length > 20);
-  assert.equal(typeof body.weight, 'number');
-});
-
-test('another account cannot read or rate your question', async () => {
-  const mine = await registerAndOnboard(app);
-  const theirs = await registerAndOnboard(app);
-  const { body: question } = await mine.auth(request(app).get('/api/prompts/today'));
-
-  const explanation = await theirs.auth(
-    request(app).get(`/api/prompts/${question.promptShownId}/explanation`),
-  );
-  const rating = await theirs.auth(
-    request(app).post(`/api/prompts/${question.promptShownId}/rating`).send({ relevant: true }),
-  );
-
-  assert.equal(explanation.status, 404);
-  assert.equal(rating.status, 404);
-});
 
 test('an empty entry is refused with the message the screen shows', async () => {
   const session = await registerAndOnboard(app);
@@ -77,7 +18,8 @@ test('an empty entry is refused with the message the screen shows', async () => 
 
 test('saving an entry classifies it and moves the profile', async () => {
   const session = await registerAndOnboard(app);
-  const { body: question } = await session.auth(request(app).get('/api/prompts/today'));
+  const { body: today } = await session.auth(request(app).get('/api/prompts/today'));
+  const question = today.questions[0];
 
   const response = await session.auth(
     request(app).post('/api/entries').send({
@@ -91,44 +33,6 @@ test('saving an entry classifies it and moves the profile', async () => {
   assert.equal(response.body.entry.status, 'classified');
   assert.equal(response.body.entry.zone.id, 'work');
   assert.ok(response.body.weightChanges.length > 0, 'the profile moved');
-});
-
-test('the entry is linked to the question it answers', async () => {
-  const session = await registerAndOnboard(app);
-  const { body: question } = await session.auth(request(app).get('/api/prompts/today'));
-
-  await session.auth(
-    request(app)
-      .post('/api/entries')
-      .send({ text: 'I slept badly and had no energy.', promptShownId: question.promptShownId }),
-  );
-
-  const { body } = await session.auth(request(app).get('/api/prompts/today'));
-  assert.equal(body.wasAnswered, true);
-});
-
-test('a question that belongs to someone else cannot be answered', async () => {
-  const mine = await registerAndOnboard(app);
-  const theirs = await registerAndOnboard(app);
-  const { body: question } = await mine.auth(request(app).get('/api/prompts/today'));
-
-  const response = await theirs.auth(
-    request(app).post('/api/entries').send({ text: 'not mine', promptShownId: question.promptShownId }),
-  );
-  assert.equal(response.status, 404);
-});
-
-test('a rating is recorded with its timestamp', async () => {
-  const session = await registerAndOnboard(app);
-  const { body: question } = await session.auth(request(app).get('/api/prompts/today'));
-
-  const response = await session.auth(
-    request(app).post(`/api/prompts/${question.promptShownId}/rating`).send({ relevant: false }),
-  );
-
-  assert.equal(response.status, 200);
-  assert.equal(response.body.relevanceRating, false);
-  assert.ok(response.body.ratedAt, 'a rating without its time would break the database CHECK');
 });
 
 test('entries can be listed and filtered by zone', async () => {

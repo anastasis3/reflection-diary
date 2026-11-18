@@ -11,14 +11,12 @@
  */
 import ApiError from '../utils/ApiError.js';
 import { ONBOARDING_STATEMENTS, ZONE_IDS } from '../data/zones.js';
-import * as onboardingRepo from '../repositories/onboarding.repo.js';
-import * as profilesRepo from '../repositories/profiles.repo.js';
-import * as weightsRepo from '../repositories/weights.repo.js';
+import { onboardingRepo, profilesRepo, weightsRepo } from '../repositories/index.js';
 
 /** The questionnaire plus how far this participant has got. */
-export function getState(userId) {
-  const answers = onboardingRepo.listForUser(userId);
-  const profile = profilesRepo.findById(userId);
+export async function getState(userId) {
+  const answers = await onboardingRepo.listForUser(userId);
+  const profile = await profilesRepo.findById(userId);
   const answeredFor = new Set(answers.map((a) => a.zoneId));
 
   return {
@@ -39,11 +37,11 @@ export function getState(userId) {
   };
 }
 
-export function saveAnswer(userId, zoneId, value) {
+export async function saveAnswer(userId, zoneId, value) {
   if (!ZONE_IDS.includes(zoneId)) {
     throw ApiError.badRequest(`"${zoneId}" is not one of the nine zones.`);
   }
-  onboardingRepo.upsert(userId, zoneId, value);
+  await onboardingRepo.upsert(userId, zoneId, value);
   return getState(userId);
 }
 
@@ -54,8 +52,8 @@ export function saveAnswer(userId, zoneId, value) {
  * quiz would start the adaptation from a guess, and the participant would have
  * no way to tell which numbers were theirs.
  */
-export function complete(userId) {
-  const answers = onboardingRepo.listForUser(userId);
+export async function complete(userId) {
+  const answers = await onboardingRepo.listForUser(userId);
   if (answers.length < ONBOARDING_STATEMENTS.length) {
     const missing = ONBOARDING_STATEMENTS.filter(
       (s) => !answers.some((a) => a.zoneId === s.zoneId),
@@ -63,12 +61,12 @@ export function complete(userId) {
     throw ApiError.badRequest('Answer all nine statements first.', { missing });
   }
 
-  weightsRepo.seedFromQuiz(userId, answers);
-  profilesRepo.markOnboardingComplete(userId);
+  await weightsRepo.seedFromQuiz(userId, answers);
+  await profilesRepo.markOnboardingComplete(userId);
 
   return {
-    ...getState(userId),
-    weights: weightsRepo.listForUser(userId),
+    ...(await getState(userId)),
+    weights: await weightsRepo.listForUser(userId),
   };
 }
 

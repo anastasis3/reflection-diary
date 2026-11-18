@@ -5,18 +5,15 @@
  * withdraw, take their data and leave has to be able to do all three without
  * writing to anybody, and deletion has to actually delete.
  */
-import * as usersRepo from '../repositories/users.repo.js';
-import * as profilesRepo from '../repositories/profiles.repo.js';
-import * as consentsRepo from '../repositories/consents.repo.js';
-import * as onboardingRepo from '../repositories/onboarding.repo.js';
-import * as weightsRepo from '../repositories/weights.repo.js';
-import * as entriesRepo from '../repositories/entries.repo.js';
-import * as promptsShownRepo from '../repositories/promptsShown.repo.js';
+import {
+  accountsRepo, profilesRepo, consentsRepo, onboardingRepo, weightsRepo, entriesRepo,
+  promptsShownRepo,
+} from '../repositories/index.js';
 import { getPrompt } from '../data/prompts.js';
 import ApiError from '../utils/ApiError.js';
 
-export function listConsents(userId) {
-  return consentsRepo.listForUser(userId).map((c) => ({
+export async function listConsents(userId) {
+  return (await consentsRepo.listForUser(userId)).map((c) => ({
     purpose: c.purpose,
     textVersion: c.textVersion,
     grantedAt: c.grantedAt,
@@ -31,15 +28,15 @@ export function listConsents(userId) {
  * Nothing is deleted and the diary keeps working: entries are still saved, and
  * the profile simply stops changing because nothing is analysed any more.
  */
-export function withdrawAiConsent(userId) {
-  const consent = consentsRepo.find(userId, 'ai_processing');
+export async function withdrawAiConsent(userId) {
+  const consent = await consentsRepo.find(userId, 'ai_processing');
   if (!consent) throw ApiError.notFound('No AI processing consent is recorded for this account.');
-  consentsRepo.withdraw(userId, 'ai_processing');
+  await consentsRepo.withdraw(userId, 'ai_processing');
   return listConsents(userId);
 }
 
-export function grantAiConsent(userId) {
-  consentsRepo.grant(userId, 'ai_processing');
+export async function grantAiConsent(userId) {
+  await consentsRepo.grant(userId, 'ai_processing');
   return listConsents(userId);
 }
 
@@ -49,8 +46,8 @@ export function grantAiConsent(userId) {
  * It is assembled from the same repositories the application reads, not from a
  * separate summary, so it cannot quietly omit something.
  */
-export function exportData(userId) {
-  const user = usersRepo.findById(userId);
+export async function exportData(userId) {
+  const user = await accountsRepo.findById(userId);
   if (!user) throw ApiError.notFound('Account not found.');
 
   return {
@@ -59,18 +56,17 @@ export function exportData(userId) {
       id: user.id,
       email: user.email,
       createdAt: user.createdAt,
-      profile: profilesRepo.findById(userId),
+      profile: await profilesRepo.findById(userId),
     },
-    consents: listConsents(userId),
-    onboardingAnswers: onboardingRepo.listForUser(userId),
-    weights: weightsRepo.listForUser(userId),
-    weightHistory: weightsRepo.historyForUser(userId),
-    weightChanges: weightsRepo.changesForUser(userId),
-    entries: entriesRepo.listForUser(userId).map((entry) => ({
-      ...entry,
-      scores: entriesRepo.scoresFor(entry.id),
-    })),
-    questionsShown: promptsShownRepo.listForUser(userId).map((p) => ({
+    consents: await listConsents(userId),
+    onboardingAnswers: await onboardingRepo.listForUser(userId),
+    weights: await weightsRepo.listForUser(userId),
+    weightHistory: await weightsRepo.historyForUser(userId),
+    weightChanges: await weightsRepo.changesForUser(userId),
+    entries: (await entriesRepo.listForUser(userId)).map(({ question, ...entry }) => entry),
+    // The participant's own data includes why each question was offered:
+    // the export is read after the fact, so it cannot bias a choice.
+    questionsShown: (await promptsShownRepo.listForUser(userId)).map((p) => ({
       ...p,
       promptText: getPrompt(p.promptId)?.text ?? null,
     })),
@@ -84,20 +80,23 @@ export function exportData(userId) {
  * collection is cleared explicitly, in the same order, and the count is
  * returned so that the operation can be shown to have done something.
  */
-export function deleteAccount(userId) {
+export async function deleteAccount(userId) {
   const before = {
-    entries: entriesRepo.countForUser(userId),
-    questionsShown: promptsShownRepo.listForUser(userId).length,
-    weights: weightsRepo.listForUser(userId).length,
+    entries: await entriesRepo.countForUser(userId),
+    questionsShown: (await promptsShownRepo.listForUser(userId)).length,
+    weights: (await weightsRepo.listForUser(userId)).length,
   };
 
-  entriesRepo.removeAllForUser(userId);
-  promptsShownRepo.removeAllForUser(userId);
-  weightsRepo.removeAllForUser(userId);
-  onboardingRepo.removeAllForUser(userId);
-  consentsRepo.removeAllForUser(userId);
-  profilesRepo.remove(userId);
-  usersRepo.remove(userId);
+  // With Supabase the last line alone would do: deleting the auth user
+  // cascades through every table. The explicit steps keep both drivers on
+  // the same path and make the order visible.
+  await promptsShownRepo.removeAllForUser(userId);
+  await entriesRepo.removeAllForUser(userId);
+  await weightsRepo.removeAllForUser(userId);
+  await onboardingRepo.removeAllForUser(userId);
+  await consentsRepo.removeAllForUser(userId);
+  await profilesRepo.remove(userId);
+  await accountsRepo.remove(userId);
 
   return { deleted: true, removed: before };
 }

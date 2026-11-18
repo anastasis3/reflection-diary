@@ -3,9 +3,8 @@
  *
  * Every screen calls a named function from here, never `fetch` directly. That
  * gives one place to attach the token, one place to turn an error response
- * into a thrown `ApiError`, and one list of the endpoints the interface
- * actually uses — which is also how a reader checks that the front-end and
- * docs/openapi.yaml still agree.
+ * into a thrown `ApiError`, and one list of the endpoints the interface uses —
+ * which is also how a reader checks that it agrees with docs/openapi.yaml.
  */
 
 const BASE = '/api';
@@ -26,16 +25,16 @@ export class ApiError extends Error {
   }
 }
 
+/** The bearer token, kept in this browser between visits. */
 export const token = {
-  get: () => localStorage.getItem(TOKEN_KEY),
-  set: (value) => localStorage.setItem(TOKEN_KEY, value),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
+  get: () => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } },
+  set: (value) => { try { localStorage.setItem(TOKEN_KEY, value); } catch { /* private mode */ } },
+  clear: () => { try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ } },
 };
 
 async function request(method, path, body) {
   const headers = {};
   if (body !== undefined) headers['content-type'] = 'application/json';
-
   const stored = token.get();
   if (stored) headers.authorization = `Bearer ${stored}`;
 
@@ -47,23 +46,17 @@ async function request(method, path, body) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    // The request never reached the server: offline, or the server is down.
+    // Never reached the server: offline, or the server is down.
     throw new ApiError(0, 'OFFLINE', 'No connection to the server. Your text is kept on this device.');
   }
 
   if (response.status === 204) return null;
-
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
     const error = payload?.error ?? {};
     if (response.status === 401) token.clear();
-    throw new ApiError(
-      response.status,
-      error.code ?? 'UNKNOWN',
-      error.message ?? 'Something went wrong.',
-      error.details,
-    );
+    throw new ApiError(response.status, error.code ?? 'UNKNOWN', error.message ?? 'Something went wrong.', error.details);
   }
   return payload;
 }
@@ -74,24 +67,22 @@ const patch = (path, body) => request('PATCH', path, body);
 const del = (path) => request('DELETE', path);
 
 export const api = {
-  // --- public ---------------------------------------------------------------
-  zones: () => get('/zones'),
-  health: () => get('/health'),
-
   // --- account --------------------------------------------------------------
   register: (payload) => post('/auth/register', payload),
   login: (payload) => post('/auth/login', payload),
   me: () => get('/auth/me'),
+  setName: (name) => patch('/account/name', { name }),
 
   // --- the quiz -------------------------------------------------------------
   onboarding: () => get('/onboarding'),
   answerStatement: (zoneId, value) => post('/onboarding/answers', { zoneId, value }),
   completeOnboarding: () => post('/onboarding/complete'),
 
-  // --- the question of the day ---------------------------------------------
-  todaysQuestion: () => get('/prompts/today'),
+  // --- three questions a day ------------------------------------------------
+  today: () => get('/prompts/today'),
+  choose: (promptShownId) => post(`/prompts/${promptShownId}/choose`),
   explanation: (promptShownId) => get(`/prompts/${promptShownId}/explanation`),
-  rateQuestion: (promptShownId, relevant) => post(`/prompts/${promptShownId}/rating`, { relevant }),
+  rate: (promptShownId, relevant) => post(`/prompts/${promptShownId}/rating`, { relevant }),
 
   // --- entries --------------------------------------------------------------
   saveEntry: (text, promptShownId) => post('/entries', { text, promptShownId }),
@@ -104,8 +95,11 @@ export const api = {
 
   // --- the topic profile ----------------------------------------------------
   profile: () => get('/profile'),
+  insight: () => get('/profile/insight'),
+  snapshots: (days = 7) => get(`/profile/history?days=${days}`),
   updateWeights: (zones) => patch('/profile/weights', { zones }),
   trend: (zone, days = 30) => get(`/profile/trend?zone=${zone}&days=${days}`),
+  changes: () => get('/profile/changes'),
 
   // --- history --------------------------------------------------------------
   historySummary: () => get('/history/summary'),

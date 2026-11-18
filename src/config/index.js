@@ -51,18 +51,42 @@ export const config = {
   },
 
   storage: {
+    /**
+     * memory   — one JSON file on disk. No database server, no account
+     *            anywhere: `npm install && npm start` works from a clean
+     *            clone. The tests and CI use this.
+     * supabase — PostgreSQL on Supabase for the data and Supabase Auth for
+     *            the accounts. This is the deployment the thesis describes.
+     */
+    driver: process.env.DB_DRIVER ?? 'memory',
     // Each test file gets its own data file so the suites cannot collide.
     dataFile: path.resolve(
       rootDir,
       process.env.DATA_FILE ?? (isTest ? './data/test-db.json' : './data/db.json'),
     ),
+    // Supabase → Project Settings → Database → Connection string (URI).
+    databaseUrl: process.env.SUPABASE_DB_URL ?? '',
   },
+
+  supabase: {
+    url: process.env.SUPABASE_URL ?? '',
+    // The secret key (sb_secret_…, or the legacy service_role key) bypasses
+    // row level security. It lives on the server only, never in the browser.
+    serviceRoleKey: process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+  },
+
+  // AES-256-GCM key for entry text (NFR-6): 64 hex characters = 32 bytes.
+  // The database stores ciphertext only (entries.text_encrypted).
+  encryptionKey: process.env.ENTRY_ENCRYPTION_KEY ?? '',
 
   /** Parameters of the adaptation model. Documented in README §Algorithm. */
   adaptation: {
     alpha: num('ADAPTATION_ALPHA', 0.3),
     explorationRate: num('EXPLORATION_RATE', 0.15),
-    randomQuestionShare: num('RANDOM_QUESTION_SHARE', 0.33),
+    // Picking a question nudges its zone up once by this much (source = choice).
+    choiceBoost: num('CHOICE_BOOST', 0.03),
+    // Three questions a day: two from the selection rule, one random control.
+    questionsPerDay: 3,
     minActiveZones: 3,
     topN: 3,
   },
@@ -79,9 +103,22 @@ export function checkConfig() {
   if (config.isProduction && config.auth.jwtSecret.startsWith('development-only')) {
     problems.push('JWT_SECRET must be set to a real secret in production.');
   }
-  const { alpha, explorationRate, randomQuestionShare } = config.adaptation;
-  for (const [name, value] of Object.entries({ alpha, explorationRate, randomQuestionShare })) {
+  const { alpha, explorationRate, choiceBoost } = config.adaptation;
+  for (const [name, value] of Object.entries({ alpha, explorationRate, choiceBoost })) {
     if (value < 0 || value > 1) problems.push(`${name} must be between 0 and 1, got ${value}.`);
+  }
+  if (!['memory', 'supabase'].includes(config.storage.driver)) {
+    problems.push(`DB_DRIVER must be "memory" or "supabase", got "${config.storage.driver}".`);
+  }
+  if (config.storage.driver === 'supabase') {
+    if (!config.storage.databaseUrl) problems.push('SUPABASE_DB_URL is required when DB_DRIVER=supabase.');
+    if (!config.supabase.url) problems.push('SUPABASE_URL is required when DB_DRIVER=supabase.');
+    if (!config.supabase.serviceRoleKey) {
+      problems.push('SUPABASE_SECRET_KEY is required when DB_DRIVER=supabase.');
+    }
+    if (!/^[0-9a-f]{64}$/i.test(config.encryptionKey)) {
+      problems.push('ENTRY_ENCRYPTION_KEY must be 64 hex characters when DB_DRIVER=supabase.');
+    }
   }
   if (problems.length > 0) {
     throw new Error(`Invalid configuration:\n  - ${problems.join('\n  - ')}`);

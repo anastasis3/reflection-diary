@@ -714,6 +714,10 @@ addEventListener('keydown', (e) => {
 }, true);
 
 ui.hint.addEventListener('click', () => startQuiz());
+// клик в любом месте по глазу тоже запускает квиз (кроме кнопок интерфейса)
+ui.root.addEventListener('click', (e) => {
+  if (st.phase === 'rest' && !e.target.closest('button')) startQuiz();
+});
 ui.classic.addEventListener('click', () => API()?.classic());
 
 /* ---------------------------------------------------------------------

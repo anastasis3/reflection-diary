@@ -23,6 +23,7 @@
  */
 import config from '../config/index.js';
 import { ZONE_IDS } from '../data/zones.js';
+import { classifyWithClaude } from './claude.classifier.js';
 
 /**
  * Word stems belonging to each zone. Matching is on stems, so "meeting",
@@ -123,6 +124,8 @@ export async function classify(text, { strategy = config.classifier } = {}) {
     case 'failing':
       // Used by the tests and by a manual run-through of the degraded path.
       throw new Error('The analysis service did not respond.');
+    case 'claude':
+      return classifyWithClaude(text);
     case 'keyword':
     default:
       return classifyWithLexicon(text);

@@ -14,6 +14,7 @@ import entriesRoutes from './entries.routes.js';
 import profileRoutes from './profile.routes.js';
 import historyRoutes from './history.routes.js';
 import accountRoutes from './account.routes.js';
+import researchRoutes from './research.routes.js';
 import * as zonesController from '../controllers/zones.controller.js';
 
 const router = Router();
@@ -31,5 +32,6 @@ router.use('/entries', entriesRoutes); //       writing and reading entries
 router.use('/profile', profileRoutes); //       the nine weights and trends
 router.use('/history', historyRoutes); //       calendar, totals, one day
 router.use('/account', accountRoutes); //       consent, export, deletion
+router.use('/research', researchRoutes); //     researcher console (password)
 
 export default router;

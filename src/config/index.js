@@ -92,6 +92,13 @@ export const config = {
   },
 
   classifier: process.env.CLASSIFIER ?? 'keyword',
+    research: { password: process.env.RESEARCH_PASSWORD ?? '' },
+    claude: {
+    apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    model: process.env.CLAUDE_MODEL ?? 'claude-haiku-5-5',
+    timeoutMs: num('CLAUDE_TIMEOUT_MS', 15000),
+    retryDelayMs: num('CLAUDE_RETRY_DELAY_MS', 1000),
+  },
 };
 
 /**
@@ -106,6 +113,9 @@ export function checkConfig() {
   const { alpha, explorationRate, choiceBoost } = config.adaptation;
   for (const [name, value] of Object.entries({ alpha, explorationRate, choiceBoost })) {
     if (value < 0 || value > 1) problems.push(`${name} must be between 0 and 1, got ${value}.`);
+  }
+  if (config.classifier === 'claude' && !config.claude.apiKey) {
+    problems.push('ANTHROPIC_API_KEY is required when CLASSIFIER=claude.');
   }
   if (!['memory', 'supabase'].includes(config.storage.driver)) {
     problems.push(`DB_DRIVER must be "memory" or "supabase", got "${config.storage.driver}".`);

@@ -10,6 +10,18 @@
 import { api, token } from '../api.js';
 import { S, ICON, $, go, openDialog } from '../core.js';
 
+/** Show / hide the password: the icon and the label follow the state. */
+function wireReveal(button, input) {
+  button.addEventListener('click', () => {
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    button.innerHTML = show ? ICON.eyeOff() : ICON.eye();
+    button.setAttribute('aria-pressed', String(show));
+    button.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    input.focus();
+  });
+}
+
 const okEmail = (v) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
 
 function signedIn({ user, token: value }) {
@@ -38,7 +50,7 @@ export const register = {
     <label class="lbl" for="pw">Password</label>
     <div style="position:relative">
       <input id="pw" type="password" autocomplete="new-password" aria-describedby="pwErr">
-      <button class="linkbtn" id="revealPw" type="button" aria-label="Show password" style="position:absolute;right:12px;top:12px">${ICON.eye()}</button>
+      <button class="reveal" id="revealPw" type="button" aria-label="Show password" aria-pressed="false">${ICON.eye()}</button>
     </div>
     <p class="err" id="pwErr">${ICON.warn('#FF9B8A', 13)} Use at least 8 characters.</p>
     <p class="hint" style="margin-top:-12px">At least 8 characters</p>
@@ -69,7 +81,7 @@ export const register = {
           : 'Tick the Privacy Notice to continue.';
     };
     [c1, c2].forEach((c) => c.addEventListener('change', upd)); upd();
-    $('#revealPw').addEventListener('click', () => { pw.type = pw.type === 'password' ? 'text' : 'password'; });
+    wireReveal($('#revealPw'), pw);
     em.addEventListener('blur', () => showErr(em, '#emErr', Boolean(em.value) && !okEmail(em.value), 'Enter a valid e-mail address.'));
     pw.addEventListener('blur', () => showErr(pw, '#pwErr', Boolean(pw.value) && pw.value.length < 8));
     [em, pw].forEach((i) => i.addEventListener('input', () => showErr(i, i === em ? '#emErr' : '#pwErr', false)));
@@ -110,7 +122,7 @@ export const login = {
     <label class="lbl" for="lpw">Password</label>
     <div style="position:relative">
       <input id="lpw" type="password" autocomplete="current-password" aria-describedby="lErr">
-      <button class="linkbtn" id="revealLpw" type="button" aria-label="Show password" style="position:absolute;right:12px;top:12px">${ICON.eye()}</button>
+      <button class="reveal" id="revealLpw" type="button" aria-label="Show password" aria-pressed="false">${ICON.eye()}</button>
     </div>
     <p class="err" id="lErr">${ICON.warn('#FF9B8A', 13)} <span>E-mail or password is incorrect.</span></p>
     <p style="text-align:right;margin:0"><button class="linkbtn" id="forgot" type="button">Forgot password?</button></p>
@@ -121,7 +133,7 @@ export const login = {
 
   wire() {
     const em = $('#lem'), pw = $('#lpw'), btn = $('#login'), err = $('#lErr');
-    $('#revealLpw').addEventListener('click', () => { pw.type = pw.type === 'password' ? 'text' : 'password'; });
+    wireReveal($('#revealLpw'), pw);
     $('#forgot').addEventListener('click', () => openDialog(`<h2 style="margin:0 0 10px;font-size:18px">Forgot your password?</h2>
       <p style="color:var(--txt2);font-size:15px;margin:0">Password reset by e-mail is not part of the pilot yet. Write to the researcher and the password will be reset for you.</p>
       <div class="dlgrow"><button class="btn" data-close>Close</button></div>`));

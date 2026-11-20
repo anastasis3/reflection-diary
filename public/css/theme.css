@@ -82,7 +82,7 @@ textarea{caret-color:#E879F9}
 .pill[aria-pressed="true"]{background:linear-gradient(135deg,#8B5CF6,#C026D3); border-color:rgba(233,213,255,.4);
   box-shadow:0 0 18px rgba(192,38,211,.4)}
 .scale button{background:rgba(255,255,255,.03); border:1px solid rgba(168,85,247,.3); transition:all .18s}
-.scale button:hover{border-color:#C084FC; box-shadow:0 0 18px rgba(139,92,246,.35)}
+@media (hover:hover){ .scale button:hover{border-color:#C084FC; box-shadow:0 0 18px rgba(139,92,246,.35)} }
 .scale button[aria-pressed="true"]{background:linear-gradient(160deg,rgba(139,92,246,.8),rgba(192,38,211,.55));
   border-color:#F5D0FE; box-shadow:0 0 22px rgba(232,121,249,.5)}
 .steps i.done{background:#C084FC; box-shadow:0 0 8px rgba(192,132,252,.6)}
@@ -365,7 +365,11 @@ nav[hidden]{display:none !important}
 .ei-scale button{position:relative; min-height:62px; border-radius:14px; cursor:pointer;
   background:rgba(255,255,255,.035); border:1px solid rgba(196,181,253,.24); color:var(--ei-text);
   font:600 22px/1 "Quicksand",system-ui,sans-serif; transition:transform .18s, border-color .18s, background .18s, box-shadow .18s}
-.ei-scale button:hover{border-color:var(--ei-lilac); transform:translateY(-2px); box-shadow:0 0 22px rgba(139,92,246,.35)}
+/* Hover only on devices that really hover, and only after the pointer has
+   moved on a new card: otherwise the button under a still cursor looks chosen. */
+@media (hover:hover){
+  .ei-card:not(.nohover) .ei-scale button:hover{border-color:var(--ei-lilac); transform:translateY(-2px); box-shadow:0 0 22px rgba(139,92,246,.35)}
+}
 .ei-scale button[aria-pressed="true"]{background:linear-gradient(160deg,rgba(139,92,246,.75),rgba(232,121,249,.45));
   border-color:#F5D0FE; box-shadow:0 0 28px rgba(232,121,249,.6)}
 .ei-scale button kbd{position:absolute; right:7px; top:6px; font:500 9px/1 var(--ei-mono); color:var(--ei-dim)}
@@ -429,3 +433,10 @@ nav[hidden]{display:none !important}
   #nav{width:100%;justify-content:space-between;overflow-x:auto}
   #nav button{padding-left:12px;padding-right:12px}
 }
+/* --- show / hide password: a proper 40px target, centred in the field --- */
+.reveal{position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  width:40px; height:40px; display:grid; place-items:center; padding:0;
+  background:none; border:0; border-radius:10px; cursor:pointer; opacity:.8}
+.reveal:hover, .reveal[aria-pressed="true"]{opacity:1}
+.reveal:focus-visible{outline:2px solid #C084FC; outline-offset:-2px}
+input[type="password"], #pw, #lpw{padding-right:48px}

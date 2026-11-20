@@ -618,6 +618,9 @@ function drawCard(motion) {
   const card = ui.quiz.querySelector('.ei-card');
   card.tabIndex = -1;
   card.focus({ preventScroll: true });
+  // no hover glow until the pointer actually moves (see .nohover in theme.css)
+  card.classList.add('nohover');
+  card.addEventListener('pointermove', () => card.classList.remove('nohover'), { once: true });
 }
 
 function choose(v) {

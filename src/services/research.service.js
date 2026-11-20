@@ -16,7 +16,7 @@ async function loadRows() {
       query(`select user_id as "userId", zone_id as "zoneId", selection_reason as "selectionReason",
                     shown_on as "shownOn", slot, was_chosen as "wasChosen", chosen_at as "chosenAt",
                     was_answered as "wasAnswered", relevance_rating as "relevanceRating",
-                    rated_at as "ratedAt", explanation_opened as "explanationOpened"
+                    rated_at as "ratedAt", explanation_opened as "explanationOpened", text_source as "textSource"
              from prompts_shown`),
       query(`select user_id as "userId", created_at as "createdAt", status from entries`),
     ]);
@@ -113,11 +113,11 @@ export async function exportCsv() {
   const { profiles, shown } = await loadRows();
   const alias = new Map(profiles.map((p, i) => [p.id, `P-${String(i + 1).padStart(3, '0')}`]));
   const first = new Set(firstPicks(shown));
-  const head = 'participant,day,slot,zone,reason,chosen,first_pick,answered,rating,explanation_opened';
+  const head = 'participant,day,slot,zone,reason,text_source,chosen,first_pick,answered,rating,explanation_opened';
   const lines = shown
     .slice()
     .sort((x, y) => alias.get(x.userId).localeCompare(alias.get(y.userId)) || x.shownOn.localeCompare(y.shownOn) || x.slot - y.slot)
-    .map((x) => [alias.get(x.userId), x.shownOn, x.slot, x.zoneId, x.selectionReason, x.wasChosen,
+    .map((x) => [alias.get(x.userId), x.shownOn, x.slot, x.zoneId, x.selectionReason, x.textSource ?? 'bank', x.wasChosen,
       first.has(x), x.wasAnswered, x.relevanceRating ?? '', x.explanationOpened].join(','));
   return [head, ...lines].join('\n') + '\n';
 }

@@ -34,7 +34,7 @@ function hydrate(entry) {
     scores,
     topZoneId: topOf(scores),
     question: shown
-      ? { promptShownId: shown.id, promptId: shown.promptId, zoneId: shown.zoneId,
+      ? { promptShownId: shown.id, promptId: shown.promptId, promptText: shown.promptText ?? null, zoneId: shown.zoneId,
           relevanceRating: shown.relevanceRating }
       : null,
   };

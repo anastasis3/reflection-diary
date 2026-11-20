@@ -17,7 +17,7 @@ const SELECT = `
          e.created_at as "createdAt", e.classified_at as "classifiedAt",
          coalesce((select jsonb_object_agg(s.zone_id, s.score)
                    from entry_topic_scores s where s.entry_id = e.id), '{}'::jsonb) as scores,
-         ps.id as "psId", ps.prompt_id as "psPromptId", ps.zone_id as "psZoneId",
+         ps.id as "psId", ps.prompt_id as "psPromptId", ps.prompt_text as "psPromptText", ps.zone_id as "psZoneId",
          ps.relevance_rating as "psRating"
   from entries e
   left join prompts_shown ps on ps.entry_id = e.id`;
@@ -41,7 +41,7 @@ function hydrate(row) {
     scores,
     topZoneId: topOf(scores),
     question: row.psId
-      ? { promptShownId: row.psId, promptId: row.psPromptId, zoneId: row.psZoneId,
+      ? { promptShownId: row.psId, promptId: row.psPromptId, promptText: row.psPromptText, zoneId: row.psZoneId,
           relevanceRating: row.psRating }
       : null,
   };

@@ -41,7 +41,7 @@ export function present(entry) {
           promptShownId: entry.question.promptShownId,
           zoneId: entry.question.zoneId,
           zone: getZone(entry.question.zoneId),
-          text: getPrompt(entry.question.promptId)?.text ?? null,
+          text: entry.question.promptText ?? getPrompt(entry.question.promptId)?.text ?? null,
           relevanceRating: entry.question.relevanceRating,
         }
       : null,

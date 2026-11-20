@@ -10,8 +10,8 @@ import { query } from '../../data/db.js';
 
 export const SELECTION_REASONS = ['top_three', 'exploration', 'baseline_random'];
 
-const COLS = `id, user_id as "userId", prompt_id as "promptId", zone_id as "zoneId",
-  selection_reason as "selectionReason", shown_on as "shownOn", slot, shown_at as "shownAt",
+const COLS = `id, user_id as "userId", prompt_id as "promptId", prompt_text as "promptText",
+  text_source as "textSource", zone_id as "zoneId", selection_reason as "selectionReason", shown_on as "shownOn", slot, shown_at as "shownAt",
   was_chosen as "wasChosen", chosen_at as "chosenAt", was_answered as "wasAnswered",
   entry_id as "entryId", relevance_rating as "relevanceRating", rated_at as "ratedAt",
   explanation_opened as "explanationOpened"`;
@@ -25,9 +25,11 @@ export async function listForDay(userId, day) {
 
 export async function createDay(userId, day, questions) {
   await query(
-    `insert into prompts_shown (user_id, prompt_id, zone_id, selection_reason, shown_on, slot)
-     select $1, p, z, r, $2, s
-     from unnest($3::int[], $4::text[], $5::text[], $6::smallint[]) as t(p, z, r, s)
+    `insert into prompts_shown (user_id, prompt_id, zone_id, selection_reason, shown_on, slot,
+                                prompt_text, text_source)
+     select $1, p, z, r, $2, s, pt, ts
+     from unnest($3::int[], $4::text[], $5::text[], $6::smallint[], $7::text[], $8::text[])
+          as t(p, z, r, s, pt, ts)
      on conflict do nothing`,
     [
       userId,
@@ -36,6 +38,8 @@ export async function createDay(userId, day, questions) {
       questions.map((q) => q.zoneId),
       questions.map((q) => q.selectionReason),
       questions.map((q) => q.slot),
+      questions.map((q) => q.promptText ?? null),
+      questions.map((q) => q.textSource ?? 'bank'),
     ],
   );
   return listForDay(userId, day);

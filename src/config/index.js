@@ -90,14 +90,21 @@ export const config = {
     minActiveZones: 3,
     topN: 3,
   },
-
   classifier: process.env.CLASSIFIER ?? 'keyword',
-    research: { password: process.env.RESEARCH_PASSWORD ?? '' },
-    claude: {
+
+  // Who writes the adaptive questions: bank (fixed list) | claude (personal,
+  // from recent entries). The random control always comes from the bank.
+  questions: process.env.QUESTIONS ?? 'bank',
+
+  // The researcher console (/research.html). Empty = turned off.
+  research: { password: process.env.RESEARCH_PASSWORD ?? '' },
+
+  claude: {
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
     model: process.env.CLAUDE_MODEL ?? 'claude-haiku-5-5',
     timeoutMs: num('CLAUDE_TIMEOUT_MS', 15000),
     retryDelayMs: num('CLAUDE_RETRY_DELAY_MS', 1000),
+    questionTimeoutMs: num('CLAUDE_QUESTION_TIMEOUT_MS', 8000),
   },
 };
 

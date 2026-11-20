@@ -30,9 +30,10 @@
 import config from '../config/index.js';
 import { promptsForZone, getPrompt } from '../data/prompts.js';
 import ApiError from '../utils/ApiError.js';
-import { weightsRepo, promptsShownRepo } from '../repositories/index.js';
+import { weightsRepo, promptsShownRepo, entriesRepo, consentsRepo } from '../repositories/index.js';
+import { generateQuestions } from './question.generator.js';
 import { getZone, ZONE_IDS } from '../data/zones.js';
-import { toDay } from '../utils/dates.js';
+import { toDay, daysAgo } from '../utils/dates.js';
 
 /** Picks from `list` with probability proportional to weight. */
 function weightedPick(list, random) {
@@ -127,15 +128,41 @@ export async function todaysQuestions(userId, { random = Math.random, day = toDa
     );
   }
 
-  const three = chooseThree({ weights, random }).map((q) => ({
+    const three = chooseThree({ weights, random }).map((q) => ({
     zoneId: q.zoneId,
     selectionReason: q.reason,
     slot: q.slot,
-    promptId: choosePrompt(q.zoneId, random).id,
+    promptId: choosePrompt(q.zoneId, random).id, // the bank question, and the fallback
+    promptText: null,
+    textSource: 'bank',
   }));
 
+  await personalise(userId, three);
   const questions = await promptsShownRepo.createDay(userId, day, three);
+
   return { day, questions, isNew: true };
+}
+
+/**
+ * QUESTIONS=claude: Claude rewrites the two ADAPTIVE questions from the
+ * participant's recent entries. The random control stays a bank question.
+ * Any failure leaves the bank questions in place.
+ */
+async function personalise(userId, three) {
+  if (config.questions !== 'claude') return;
+  if (!(await consentsRepo.isActive(userId, 'ai_processing'))) return;
+  const adaptive = three.filter((q) => q.selectionReason !== 'baseline_random');
+  try {
+    const recent = (await entriesRepo.listForUser(userId, { from: daysAgo(13) }))
+      .slice(0, 6)
+      .map((e) => ({ day: e.createdAt.slice(0, 10), text: e.text }));
+    const written = await generateQuestions(adaptive.map((q) => q.zoneId), recent);
+    for (const q of adaptive) {
+      if (written[q.zoneId]) Object.assign(q, { promptText: written[q.zoneId], textSource: 'generated' });
+    }
+  } catch (error) {
+    console.error(`Personal questions not written, bank questions used: ${error.message}`);
+  }
 }
 
 /** The three zones the diary is currently asking about, highest first. */
@@ -177,7 +204,7 @@ export function presentQuestion(shown) {
     promptShownId: shown.id,
     slot: shown.slot,
     day: shown.shownOn,
-    text: getPrompt(shown.promptId)?.text ?? null,
+    text: shown.promptText ?? getPrompt(shown.promptId)?.text ?? null,
     zone: getZone(shown.zoneId),
     wasChosen: shown.wasChosen,
     wasAnswered: shown.wasAnswered,

@@ -33,6 +33,8 @@ export async function createDay(userId, day, questions) {
       id: randomUUID(),
       userId,
       promptId: q.promptId,
+      promptText: q.promptText ?? null,
+      textSource: q.textSource ?? 'bank',
       zoneId: q.zoneId,
       selectionReason: q.selectionReason,
       shownOn: day,

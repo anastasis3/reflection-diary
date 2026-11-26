@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>Researcher console</title>
+  <!-- the diary's own fonts and colour tokens -->
   <link rel="stylesheet" href="css/base.css">
   <style>
     body{background:#07030E;color:#F0EFFB;margin:0;min-height:100vh}
@@ -23,12 +24,12 @@
     .box .big{font-size:34px;font-weight:700;margin:0;line-height:1.1}
     .big.up{color:#3DDBA8}.big.down{color:#FF9B8A}.big.none{color:#8B89A3}
     .box p{margin:6px 0 0;font-size:13px;color:#C9C6E8}.box small{color:#8B89A3;font-size:12px}
-    .tblwrap{overflow-x:auto}
     .tblwrap table{width:100%;max-width:none;border-collapse:collapse;font-size:14px}
     th{text-align:left;font-size:11px;color:#8B89A3;font-weight:500;padding:8px 6px;border-bottom:1px solid #2A2240}
     td{padding:10px 6px;border-bottom:1px solid #1E1730}
     td.r,th.r{text-align:right}
     .old{color:#F3BE8C}
+    .tblwrap{overflow-x:auto}
     .feed{list-style:none;margin:0;padding:0;font-size:13px}
     .feed li{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid #1E1730}
     .feed time{color:#8B89A3;min-width:110px}
@@ -45,7 +46,9 @@
 </head>
 <body>
 <div class="bar"><b>researcher console</b><span>researcher role</span></div>
+
 <main>
+  <!-- 1. the password, kept for this tab only -->
   <section id="login" class="box" style="max-width:420px">
     <h3>RESEARCHER ACCESS</h3>
     <p style="margin:0 0 12px">Enter the password set in <code>RESEARCH_PASSWORD</code>.</p>
@@ -54,6 +57,7 @@
     <p class="err" id="err" hidden></p>
   </section>
 
+  <!-- 2. the console -->
   <section id="console" hidden>
     <div class="row" style="justify-content:space-between">
       <div><h1>Researcher console</h1><p class="sub" id="sub"></p></div>
@@ -63,7 +67,7 @@
     <div class="box" style="margin-bottom:14px">
       <div class="row" style="justify-content:space-between;margin-bottom:6px"><b>Participants</b><small id="pcount"></small></div>
       <div class="tblwrap"><table>
-        <thead><tr><th>pseudonym</th><th class="r">days shown</th><th class="r">days written</th><th class="r">answered</th><th class="r">rated</th><th class="r">first pick adaptive</th><th class="r">last entry</th></tr></thead>
+        <thead><tr><th>participant</th><th class="r">days shown</th><th class="r">days written</th><th class="r">answered</th><th class="r">👍 adaptive</th><th class="r">👎 adaptive</th><th class="r">👍 random</th><th class="r">👎 random</th><th class="r">first pick adaptive</th><th class="r">last entry</th></tr></thead>
         <tbody id="rows"></tbody>
       </table></div>
     </div>
@@ -75,7 +79,7 @@
         <p style="margin-top:14px"><button class="main" id="csv">Export CSV</button></p>
       </div>
     </div>
-    <p class="note">Entry texts, e-mail addresses and names are never loaded here. Updates every 5 seconds.</p>
+    <p class="note">Entry texts are never loaded here. Names and e-mails are shown on this page only; the CSV export keeps pseudonyms. Updates every 5 seconds.</p>
   </section>
 </main>
 
@@ -94,7 +98,6 @@
   const when = (iso) => new Date(iso).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const pp = (v) => (v === null ? '—' : `${v > 0 ? '+' : ''}${v} pp`);
   const cls = (v) => (v === null ? 'none' : v >= 0 ? 'up' : 'down');
-  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
   async function api(path) {
     const res = await fetch(`/api/research/${path}`, { headers: { 'x-research-password': pw } });
@@ -106,7 +109,7 @@
   }
 
   function draw(d) {
-    $('#sub').textContent = `Pilot day ${d.pilotDay} · ${plural(d.participants, 'participant')} · ${d.entries} entries · classifier: ${d.classifier}${d.failedAnalyses ? ` · ${d.failedAnalyses} analyses pending` : ''}`;
+    $('#sub').textContent = `Pilot day ${d.pilotDay} · ${d.participants} participant${d.participants === 1 ? '' : 's'} · ${d.entries} entries · classifier: ${d.classifier}${d.failedAnalyses ? ` · ${d.failedAnalyses} analyses pending` : ''}`;
     const k1 = d.kpi1, k2 = d.kpi2;
     $('#kpis').innerHTML = `
       <div class="box"><h3>KPI1 · WHAT GETS PICKED FIRST</h3>
@@ -121,28 +124,33 @@
         <p class="big none">${esc(d.classifier)}</p>
         <p>${d.entries - d.failedAnalyses} of ${d.entries} entries analysed</p>
         <small>macro-F1 needs the hand-labelled sample (target ≥ 0.70)</small></div>`;
-    $('#pcount').textContent = plural(d.table.length, 'participant');
+    $('#pcount').textContent = `${d.table.length} participant${d.table.length === 1 ? '' : 's'}`;
     $('#rows').innerHTML = d.table.map((p) => {
       const days = p.lastEntry ? Math.floor((Date.now() - Date.parse(p.lastEntry)) / 86_400_000) : 0;
       return `<tr>
-      <td>${esc(p.pseudonym)}${p.onboarded ? '' : ' <small>(quiz not finished)</small>'}</td>
-      <td class="r">${p.daysShown}</td><td class="r">${p.daysWritten}</td>
-      <td class="r">${p.answered}</td><td class="r">${p.rated}</td>
+      <td><b>${esc(p.name || p.email || p.pseudonym)}</b>${p.onboarded ? '' : ' <small>(quiz not finished)</small>'}<br>
+        <small>${esc(p.pseudonym)}${p.name && p.email ? ` · ${esc(p.email)}` : ''}</small></td>
+      <td class="r">${p.daysShown}</td>
+      <td class="r">${p.daysWritten}</td>
+      <td class="r">${p.answered}</td>
+      <td class="r">${p.likedAdaptive}</td>
+      <td class="r">${p.dislikedAdaptive}</td>
+      <td class="r">${p.likedRandom}</td>
+      <td class="r">${p.dislikedRandom}</td>
       <td class="r">${p.firstPickAdaptive === null ? '—' : `${p.firstPickAdaptive}%`}</td>
       <td class="r ${days >= 3 ? 'old' : ''}">${ago(p.lastEntry)}</td></tr>`;
-    }).join('') || '<tr><td colspan="7" style="color:#8B89A3">No participants yet.</td></tr>';
+    }).join('') || '<tr><td colspan="10" style="color:#8B89A3">No participants yet.</td></tr>';
     $('#feed').innerHTML = d.feed.map((e) => `<li><time>${when(e.at)}</time>
       <span>${esc(e.who)} ${esc(e.what)}${e.zone ? ` · ${esc(e.zone)}` : ''} ${e.kind ? `<span class="tag ${e.kind}">${e.kind}</span>` : ''}</span></li>`).join('')
       || '<li style="color:#8B89A3">Nothing yet.</li>';
   }
 
-  /* real-time: new numbers every 5 seconds while the tab is open */
+  /* "real-time": fetch every 5 seconds while the tab is visible */
   async function tick() {
     clearTimeout(timer);
     try {
       draw(await (await api('summary')).json());
-      $('#live').classList.remove('off');
-      $('#liveText').textContent = `live · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+      $('#live').classList.remove('off'); $('#liveText').textContent = `live · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
     } catch (e) {
       if (e.status === 401 || e.status === 404) { sessionStorage.removeItem(KEY); pw = ''; showLogin(e.message); return; }
       $('#live').classList.add('off'); $('#liveText').textContent = 'connection lost — retrying';

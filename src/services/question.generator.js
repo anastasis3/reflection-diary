@@ -33,7 +33,12 @@ function tool(zoneIds) {
     description: 'Records one question per zone.',
     input_schema: {
       type: 'object',
-      properties: Object.fromEntries(zoneIds.map((z) => [z, { type: 'string', minLength: 5, maxLength: 200 }])),
+      properties: Object.fromEntries(zoneIds.map((z) => [z, {
+        type: 'string',
+        description: `The question for the zone "${getZone(z)?.name ?? z}": only the question itself, ending with "?". No zone name, no label, no markup.`,
+        minLength: 5,
+        maxLength: 200,
+      }])),
       required: zoneIds,
       additionalProperties: false,
     },
@@ -56,13 +61,30 @@ export function buildRequest(zoneIds, entries) {
   };
 }
 
+/**
+ * Cleans one question. Claude sometimes leaks a piece of the tool-call markup
+ * into the text ('<parameter name="energy">: …' or ': …'); that is cut off.
+ * Anything that still looks wrong gives null, and the bank question stays.
+ */
+export function cleanQuestion(raw) {
+  const q = String(raw ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[\s:;,.\-–—"'«»]+/, '')
+    .trim();
+  if (/[<>]|parameter|record_questions/i.test(q)) return null;
+  if (q.length < 5 || q.length > 200 || !q.endsWith('?')) return null;
+  return q;
+}
+
 export function parseQuestions(body, zoneIds) {
   const call = body?.content?.find((c) => c.type === 'tool_use' && c.name === 'record_questions');
   if (!call || typeof call.input !== 'object') throw new Error('Claude did not return questions.');
   const out = {};
   for (const z of zoneIds) {
-    const q = String(call.input[z] ?? '').replace(/\s+/g, ' ').trim();
-    if (q.length >= 5 && q.length <= 300) out[z] = q;
+    const q = cleanQuestion(call.input[z]);
+    if (q) out[z] = q;
   }
   return out;
 }
@@ -91,4 +113,4 @@ export async function generateQuestions(zoneIds, entries) {
   }
 }
 
-export default { generateQuestions, buildRequest, parseQuestions };
+export default { generateQuestions, buildRequest, parseQuestions, cleanQuestion };

@@ -42,6 +42,36 @@ export async function verifyCredentials(email, password) {
   return pub(data.user);
 }
 
+/**
+ * Supabase Auth sends the e-mail. The link goes through Supabase and lands on
+ * redirectTo with #access_token=…&type=recovery. Supabase answers the same for
+ * an unknown address, so nothing here reveals who has an account.
+ * The address must be listed in Authentication → URL Configuration → Redirect URLs.
+ */
+export async function sendPasswordReset(email, redirectTo) {
+  const { error } = await freshClient().auth.resetPasswordForEmail(String(email).trim().toLowerCase(), { redirectTo });
+  if (error) {
+    if (error.status === 429) {
+      throw new ApiError(429, 'TOO_MANY_REQUESTS', 'Too many reset e-mails were sent. Please try again later.');
+    }
+    throw new Error(`Supabase Auth could not send the reset e-mail: ${error.message}`);
+  }
+}
+
+/** The account whose password was changed, or null if the link's token is not valid. */
+export async function resetPassword(accessToken, password) {
+  const { data, error } = await adminClient().auth.getUser(accessToken);
+  if (error || !data?.user) return null;
+  const { data: updated, error: updateError } = await adminClient().auth.admin.updateUserById(data.user.id, { password });
+  if (updateError) {
+    if (updateError.code === 'same_password' || updateError.code === 'weak_password') {
+      throw ApiError.validation([{ field: 'password', message: 'Choose a different, stronger password.' }]);
+    }
+    throw new Error(`Supabase Auth could not change the password: ${updateError.message}`);
+  }
+  return pub(updated.user);
+}
+
 export async function findById(id) {
   const { data, error } = await adminClient().auth.admin.getUserById(id);
   if (error) return null;
@@ -53,4 +83,4 @@ export async function remove(id) {
   if (error) throw new Error(`Supabase Auth could not delete the user: ${error.message}`);
 }
 
-export default { createUser, verifyCredentials, findById, remove };
+export default { createUser, verifyCredentials, sendPasswordReset, resetPassword, findById, remove };

@@ -49,6 +49,9 @@ jobs:
         run: npm audit --audit-level=high
         continue-on-error: true
 
+      - name: Build the React interface
+        run: npm run build
+
       - name: Run the test suite
         run: npm test
         env:

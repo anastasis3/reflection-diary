@@ -75,6 +75,25 @@ export async function login({ email, password }) {
   return { user: await publicUser(account), token: issueToken(account) };
 }
 
+/**
+ * "Forgot password?". The link in the e-mail opens /reset.html. The answer is
+ * the same whether or not the address has an account, so the form cannot be
+ * used to find out who takes part.
+ */
+export async function requestPasswordReset(email, origin) {
+  const base = (config.appUrl || origin || '').replace(/\/+$/, '');
+  await accountsRepo.sendPasswordReset(email, `${base}/reset.html`);
+}
+
+/** Sets the new password from the link's token and logs the person in. */
+export async function resetPassword({ token, password }) {
+  const account = await accountsRepo.resetPassword(token, password);
+  if (!account) {
+    throw new ApiError(400, 'RESET_LINK_INVALID', 'This link has expired or was already used. Ask for a new one on the log-in page.');
+  }
+  return { user: await publicUser(account), token: issueToken(account) };
+}
+
 export async function currentUser(userId, email) {
   const profile = await profilesRepo.findById(userId);
   if (!profile) throw ApiError.unauthorized('This account no longer exists.');
@@ -87,4 +106,4 @@ export async function setName(userId, email, name) {
   return currentUser(userId, email);
 }
 
-export default { register, login, currentUser, setName, issueToken, verifyToken, publicUser, cleanName };
+export default { register, login, requestPasswordReset, resetPassword, currentUser, setName, issueToken, verifyToken, publicUser, cleanName };

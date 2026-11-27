@@ -5,7 +5,7 @@
  * `users` collection of the JSON file. The rest of the code only ever sees
  * `{ id, email, createdAt }`, exactly what the Supabase driver returns.
  */
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import store from '../../data/store.js';
 import ApiError from '../../utils/ApiError.js';
 import { hashPassword, verifyPassword } from '../../utils/password.js';
@@ -40,6 +40,38 @@ export async function verifyCredentials(email, password) {
   return (await verifyPassword(password, user.passwordHash)) ? pub(user) : null;
 }
 
+/*
+ * Password reset without e-mail: the memory driver has no mail server, so the
+ * link is printed in the server log instead. A token works once, for an hour.
+ */
+const resets = new Map(); // token -> { userId, expires }
+let lastLink = null;
+
+export async function sendPasswordReset(email, redirectTo) {
+  const user = store.state.users.find((u) => u.email === clean(email));
+  if (!user) return; // same answer as for a real account
+  const token = randomBytes(24).toString('hex');
+  resets.set(token, { userId: user.id, expires: Date.now() + 60 * 60 * 1000 });
+  lastLink = `${redirectTo}#access_token=${token}&type=recovery`;
+  if (process.env.NODE_ENV !== 'test') console.log(`Password reset link (memory driver, no e-mail sent): ${lastLink}`);
+}
+
+/** For the tests: the last link that would have been e-mailed. */
+export function lastResetLink() {
+  return lastLink;
+}
+
+export async function resetPassword(token, password) {
+  const reset = resets.get(token);
+  resets.delete(token);
+  if (!reset || reset.expires < Date.now()) return null;
+  const user = store.state.users.find((u) => u.id === reset.userId);
+  if (!user) return null;
+  user.passwordHash = await hashPassword(password);
+  store.save();
+  return pub(user);
+}
+
 export async function findById(id) {
   return pub(store.state.users.find((u) => u.id === id));
 }
@@ -49,4 +81,4 @@ export async function remove(id) {
   store.save();
 }
 
-export default { createUser, verifyCredentials, findById, remove };
+export default { createUser, verifyCredentials, sendPasswordReset, resetPassword, lastResetLink, findById, remove };

@@ -31,8 +31,8 @@ export function createApp() {
   app.use(requestLogger);
 
   // --- cross-origin requests ------------------------------------------------
-  // Mounted on /api and nowhere else. The front-end in /public is served by
-  // this same process, so it is same-origin and needs no CORS at all; putting
+  // Mounted on /api and nowhere else. The React front-end (built into dist/)
+  // is served by this same process, so it is same-origin and needs no CORS at all; putting
   // the check in front of the static files instead would make the application
   // refuse to serve its own stylesheets whenever the port changed.
   //
@@ -56,14 +56,25 @@ export function createApp() {
 
   // --- the front-end and the API documentation ------------------------------
   app.use('/docs', express.static(path.join(rootDir, 'docs')));
-  app.use(express.static(path.join(rootDir, 'public')));
+  // dist/ is the React front-end, built from client/ by `npm run build`
+  // (`npm start` builds it first). Hashed asset files are cached for a year;
+  // the HTML pages are always checked, so a new build is picked up at once.
+  const dist = path.join(rootDir, 'dist');
+  app.use(express.static(dist, {
+    setHeaders(res, file) {
+      if (file.includes(`${path.sep}assets${path.sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      else res.setHeader('Cache-Control', 'no-cache');
+    },
+  }));
 
   // The front-end is a single page with a hash router, so any other GET that
   // is not a file returns index.html. Written as a middleware rather than a
   // wildcard route because Express 5 changed wildcard path syntax.
   app.use((req, res, next) => {
     if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
-    return res.sendFile(path.join(rootDir, 'public', 'index.html'));
+    return res.sendFile(path.join(dist, 'index.html'), (error) => {
+      if (error) res.status(404).type('text').send('The front-end is not built yet: run `npm run build` (or `npm start`, which builds it).');
+    });
   });
 
   // --- errors, last ---------------------------------------------------------

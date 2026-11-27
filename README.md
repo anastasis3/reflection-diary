@@ -39,7 +39,9 @@ npm start
 Other commands:
 
 ```bash
-npm run dev       # restarts on every change
+npm run build     # builds the React interface into dist/ (npm start does it first)
+npm run dev       # the API, restarting on every change
+npm run dev:client  # the interface with hot reload on :5173 (needs npm run dev)
 npm test          # the whole test suite
 npm run seed      # a demo account with a month of history (memory driver)
 npm run db:migrate  # apply supabase/migrations to the database in SUPABASE_DB_URL
@@ -73,17 +75,19 @@ src/                     the server
   app.js                 assembles Express
   server.js              starts it
 
-public/                  the interface: HTML, CSS and JavaScript, no framework
-  css/base.css           layout and components of the mockup
-  css/theme.css          the violet glass look, the eye intro, phone tweaks
-  js/
-    core.js              state, zones, icons, render / go / route
-    api.js               the only place the browser talks to the server
-    data.js              shared loaders (profile, entries, the week)
-    radar.js             the radar chart, its animations and sparks
-    effects.js           the haze and the rating burst
-    eye.js               the Three.js eye intro of the quiz
-    screens/             auth, quiz, today, profile, history, settings
+client/                  the interface: React 18, built with Vite into dist/
+  index.html             the diary            → src/main.jsx → App.jsx
+  reset.html             set a new password   → src/reset.jsx
+  research.html          researcher console   → src/research.jsx
+  src/
+    App.jsx              top bar, navigation, which screen may be shown
+    state/               DiaryContext (shared data), useLoad (a screen's data), nav
+    lib/                 api.js (the only place the browser talks to the
+                         server), zones, dates, entry statistics
+    components/          Radar, Haze, RateBurst, icons, dialog, form fields
+    screens/             Auth, quiz/ (Quiz, EyeQuiz), Today, Profile, History, Settings
+    eye/scene.js         the Three.js scene behind the eye quiz
+    styles/              base.css (layout, components), theme.css (the violet look)
 
 supabase/
   migrations/            the database schema, in order (run on Supabase)
@@ -260,20 +264,34 @@ An absent rating means *not rated*, never *disliked*.
 
 ## The interface
 
-No framework, no build step: HTML, CSS and ES modules served as they are
-written. The markup and the styles are those of the approved clickable
-prototype, so the application looks like the mockup; the data comes from the
-API. Each screen is a module with `view()` (the HTML), `wire()` (the event
-handlers) and `load()` (the API calls it needs).
+A single-page application in **React 18**, built with **Vite** (`client/` →
+`dist/`, which Express serves). The class names and the styles are those of
+the approved clickable prototype, so the application looks like the mockup;
+the data comes from the API.
+
+* Every screen is a function component that loads its own data with
+  `useLoad()` and keeps its own state (`useState`); what several screens share
+  — the account, the nine weights, the entries, the week — lives in one React
+  context, `DiaryContext`.
+* The address bar holds the screen (`#/today`), so reload and Back work.
+  `App.jsx` decides which screens a person may see.
+* Animations that run every frame (the radar's spring and points of light, the
+  3D eye) write to the SVG / WebGL through refs inside `useEffect`, rather than
+  re-rendering React sixty times a second.
+* Three.js is loaded only when the eye quiz opens (`React.lazy`), so the
+  other screens do not download it.
+
+`npm run dev:client` starts Vite with hot reload on port 5173 (API calls go
+to `npm run dev` on port 3000).
 
 | Screen | File | What it is |
 | --- | --- | --- |
-| S-01a/b | `screens/auth.js` | Create an account (optional name, two separate consents, neither pre-ticked) and log in. |
-| S-02 | `screens/quiz.js` + `eye.js` | The nine statements. Opens as the 3D eye (each answer flies deeper in); "Classic quiz", or no WebGL, gives the plain card. Answers are saved as given; a reload resumes. |
-| S-03, S-04 | `screens/today.js` | Three questions → write → saved + rating → "That is today done" → read today's entries. |
-| S-05 | `screens/profile.js` | The insight, the nine weights, editing by hand, one zone over 30 days, what you actually write about. |
-| S-06 | `screens/history.js` | Filter pills, the month calendar with tooltips, one day in full. |
-| S-07 | `screens/settings.js` | What is stored, the name, consent, the export, log out, deletion. |
+| S-01a/b | `screens/Auth.jsx` | Create an account (optional name, two separate consents, neither pre-ticked) and log in. |
+| S-02 | `screens/quiz/Quiz.jsx` + `EyeQuiz.jsx` + `eye/scene.js` | The nine statements. Opens as the 3D eye (each answer flies deeper in); "Classic quiz", or no WebGL, gives the plain card. Answers are saved as given; a reload resumes. |
+| S-03, S-04 | `screens/Today.jsx` | Three questions → write → saved + rating → "That is today done" → read today's entries. |
+| S-05 | `screens/Profile.jsx` | The insight, the nine weights, editing by hand, one zone over 30 days, what you actually write about. |
+| S-06 | `screens/History.jsx` | Filter pills, the month calendar with tooltips, one day in full. |
+| S-07 | `screens/Settings.jsx` | What is stored, the name, consent, the export, log out, deletion. |
 
 ### Layout
 
@@ -420,8 +438,9 @@ variables missing.
   a flat 500 — an unexpected message may contain a file path, a query, or a
   value from someone's entry.
 * The request log records no bodies. Bodies here contain diary entries.
-* Everything the browser renders from a person's own text goes through `esc()`
-  in `public/js/core.js` first.
+* Everything the browser shows from a person's own text is rendered by React
+  as text, never as HTML (there is no `dangerouslySetInnerHTML` anywhere), so
+  an entry cannot run as code.
 * The draft of an unsaved entry is kept in that browser only, and the text
   reaches the server when Save is pressed — not before.
 

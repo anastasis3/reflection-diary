@@ -162,6 +162,57 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
+  /auth/forgot:
+    post:
+      tags: [Account]
+      summary: Send a password-reset link
+      description: |
+        E-mails a link to `/reset.html` (Supabase Auth sends it; the memory
+        driver prints it in the server log). The answer is the same whether or
+        not the address has an account.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200':
+          description: Accepted.
+          content: { application/json: { schema: { type: object, properties: { sent: { type: boolean } } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { description: Too many reset e-mails; try again later. }
+
+  /auth/reset:
+    post:
+      tags: [Account]
+      summary: Set a new password from the reset link
+      description: |
+        `token` is the `access_token` from the link in the e-mail. On success
+        the person is logged in. A link works once, for one hour; otherwise
+        `400 RESET_LINK_INVALID`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, minLength: 8 }
+      responses:
+        '200':
+          description: Password changed, logged in.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
+        '400': { description: The link has expired or was already used (RESET_LINK_INVALID). }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
   /auth/me:
     get:
       tags: [Account]

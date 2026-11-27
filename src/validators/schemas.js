@@ -28,6 +28,16 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Enter your password.'),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.email('Enter a valid e-mail address.'),
+});
+
+export const resetPasswordSchema = z.object({
+  // the access token from the link in the e-mail
+  token: z.string().min(10, 'The reset link is incomplete.').max(4000),
+  password: z.string().min(8, 'Use at least 8 characters.').max(200),
+});
+
 export const onboardingAnswerSchema = z.object({
   zoneId,
   value: z.coerce

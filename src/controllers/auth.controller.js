@@ -17,6 +17,18 @@ export const login = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
+/** "Forgot password?": sends the reset link. Same answer whether or not the e-mail exists. */
+export const forgot = asyncHandler(async (req, res) => {
+  const origin = req.get('origin') || `${req.protocol}://${req.get('host')}`;
+  await authService.requestPasswordReset(req.validated.body.email, origin);
+  res.json({ sent: true });
+});
+
+/** The page from the e-mail link sets the new password; the person is then logged in. */
+export const reset = asyncHandler(async (req, res) => {
+  res.json(await authService.resetPassword(req.validated.body));
+});
+
 export const me = asyncHandler(async (req, res) => {
   res.json({ user: await authService.currentUser(req.user.id, req.user.email) });
 });

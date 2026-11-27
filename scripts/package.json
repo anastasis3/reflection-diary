@@ -1,0 +1,48 @@
+{
+  "name": "reflection-diary",
+  "version": "1.0.0",
+  "description": "Adaptive Self-Reflection Diary with AI-Based Personalization \u2014 Node.js API (memory or Supabase) and React front-end",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "main": "src/server.js",
+  "scripts": {
+    "build": "vite build",
+    "prestart": "npm run build",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "dev:client": "vite",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage",
+    "seed": "node scripts/seed.js",
+    "db:migrate": "node scripts/migrate.js"
+  },
+  "keywords": [
+    "reflection",
+    "diary",
+    "adaptive",
+    "express",
+    "rest-api",
+    "react"
+  ],
+  "author": "Anastasiya Kupreichyk",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.23.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.160.0",
+    "vite": "^5.4.11",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.1"
+  }
+}

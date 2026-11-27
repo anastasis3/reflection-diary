@@ -43,6 +43,11 @@ export const config = {
     .map((o) => o.trim())
     .filter(Boolean),
 
+  // The public address of the app, e.g. https://reflection-diary.onrender.com.
+  // Used for the link in the password-reset e-mail. Empty = the address the
+  // request came from.
+  appUrl: process.env.APP_URL ?? '',
+
   auth: {
     // The fallback exists so that `npm test` and a fresh clone run without a
     // .env file. A real deployment must set JWT_SECRET (see checkConfig).
